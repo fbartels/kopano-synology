@@ -23,7 +23,7 @@ MSG="please provide 2nd parameter for on or off"
 case "$1" in
 	help)
 	echo "kopano4s-optionals (c) TosoBoso: script to en- or disable optional services in init-script for kopano4s"
-	MSG="provide kopano-service: gateway | ical | monitor | amavis |  bounce-spam | spamd | postgrey | fetchmail | courier-imap | webmeetings | coturn to set it to on or off."
+	MSG="provide kopano-service: gateway | ical | search | monitor | amavis |  bounce-spam | spamd | postgrey | fetchmail | courier-imap | webmeetings | coturn to set it to on or off."
 	;;
 	gateway)
 	if grep -q "^#GATEWAY_ENABLED" $ETC_PATH/kopano/default
@@ -60,6 +60,34 @@ case "$1" in
 			$SUDO sed -i -e 's~ICAL_ENABLED.*~ICAL_ENABLED=no~' $ETC_PATH/kopano/default
 			$SUDO sed -i -e 's~K_ICAL.*~K_ICAL="OFF"~' $ETC_PATH/package.cfg
 			MSG="ICAL disabled; please run kopano4s-init container to make effective"
+		fi
+	fi
+	;;
+	search)
+	if grep -q "^#SEARCH_ENABLED" $ETC_PATH/kopano/default
+	then
+		$SUDO sed -i -e 's~#SEARCH_ENABLED~SEARCH_ENABLED~' $ETC_PATH/kopano/default
+	fi
+	# search is also present in server.cfg
+	if grep -q "^#search_enabled" $ETC_PATH/kopano/server.cfg
+	then
+		$SUDO sed -i -e 's~#search_enabled~search_enabled~' $ETC_PATH/kopano/server.cfg
+	fi
+	if [ $# -gt 1 ] && [ $2 = "on" ]
+	then
+		$SUDO sed -i -e 's~SEARCH_ENABLED.*~SEARCH_ENABLED=yes~' $ETC_PATH/kopano/default
+		# search is also present in server.cfg
+		$SUDO sed -i -e 's~#search_enabled.*~search_enabled = yes~' $ETC_PATH/kopano/server.cfg
+		$SUDO sed -i -e 's~K_SEARCH.*~K_SEARCH="ON"~' $ETC_PATH/package.cfg
+		MSG="Search enabled; please restart package to make effective"
+	else
+		if [ $# -gt 1 ] && [ $2 = "off" ]
+		then
+			$SUDO sed -i -e 's~SEARCH_ENABLED.*~SEARCH_ENABLED=no~' $ETC_PATH/kopano/default
+			# search is also present in server.cfg
+			$SUDO sed -i -e 's~#search_enabled.*~search_enabled = no~' $ETC_PATH/kopano/server.cfg
+			$SUDO sed -i -e 's~K_SEARCH.*~K_SEARCH="OFF"~' $ETC_PATH/package.cfg
+			MSG="Search disabled; please restart package to make effective"
 		fi
 	fi
 	;;
@@ -218,7 +246,7 @@ case "$1" in
 	fi
 	;;
 	*)
-	echo "provide kopano-service: gateway | ical | monitor | amavis | bounce-spam | spamd | postgrey | fetchmail | courier-imap | webmeetings | coturn to set it to on or off."
+	echo "provide kopano-service: gateway | ical | search | monitor | amavis | bounce-spam | spamd | postgrey | fetchmail | courier-imap | webmeetings | coturn to set it to on or off."
 	;;
 esac
 echo "$MSG"

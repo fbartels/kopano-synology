@@ -48,7 +48,7 @@
 		[{
 			"key": "PKGWIZ_ATTACHMENT_ON_FS",
 			"desc": "Store mail attachments in file system share instead of database (better MySQL performance).",
-			"defaultValue": true
+			"defaultValue": false
 		 },{
 			"key": "PKGWIZ_K_SUP",
 			"desc": "Kopano Supported edition (SNR required) instead of Community edition using nightly builds.",
@@ -59,8 +59,12 @@
 			"defaultValue": false
 		 },{
 			"key": "PKGWIZ_BUILD",
-			"desc": "Build Docker locally instead of loading compiled container from TosoBoso's Docker repository.",
-			"defaultValue": false 
+			"desc": "Build Docker locally with pkp-7.2 (beta) instead of loading from Docker repository (php 7.0).",
+			"defaultValue": false
+		 },{
+			"key": "PKGWIZ_DOCKER_NW_HOST",
+			"desc": "Run Docker container in network settings host instead of bridge (experimental no NAT-ing).",
+			"defaultValue": false
 		}]
 	}]
 },{
@@ -91,6 +95,10 @@
 		"desc": "Select services and features which by default are optional and disabled (e.g. Mac needs ICAL/GW):",
 		"subitems": 
 		[{
+			"key": "PKGWIZ_K_SEARCH",
+			"desc": "Search for full text indexing (comes with I/O penalty; best use on large systems with SSD).",
+			"defaultValue": false
+		 },{
 			"key": "PKGWIZ_K_GATEWAY_ICAL",
 			"desc": "Gateway for IMAP/POP3 and ICAL protocol (optional when using Z-Push Active-Sync).",
 			"defaultValue": false
@@ -196,7 +204,7 @@
 		[{
 			"key": "PKGWIZ_K_AMAVISD",
 			"desc": "Scanning: integrate ClamAV, SpamAssassin via Amavisd-new with Postfix, Fetchmail.",
-			"defaultValue": true
+			"defaultValue": false
 		 },{
 			"key": "PKGWIZ_K_POSTGREY",
 			"desc": "Postfix: add Postgrey to temp-reject messages for initial sender to trick spamers.",

@@ -41,8 +41,8 @@ case "$1" in
 		fi
 		if [ -e $ETC_PATH/kopano/mount.issue ]
 		then
-			rm $ETC_PATH/kopano/mount.issue
-			docker rm kopano4s
+			$SUDO rm $ETC_PATH/kopano/mount.issue
+			$SUDO docker rm kopano4s
 		fi
 		if $SUDO docker ps | grep -q kopano4s
 		then

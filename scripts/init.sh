@@ -2,10 +2,15 @@
 # (c) 2018 vbettag initialisation for Kopano4Syno in Docker container
 # kopano-monitor, gateway, ical disabled by default and added if found in etc-default
 if [ ! -e /etc/kopano/default ] && [ -e /etc/kopano/default.init ] ; then cp /etc/kopano/default.init /etc/kopano/default ; fi
-K_SERVICES="kopano-server kopano-spooler kopano-dagent kopano-search rsyslog"
+K_SERVICES="kopano-server kopano-spooler kopano-dagent rsyslog"
+if grep -q ^SEARCH_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-search" ; fi
 if grep -q ^MONITOR_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-monitor" ; fi
 if grep -q ^GATEWAY_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-gateway" ; fi
 if grep -q ^ICAL_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-ical" ; fi
+W_SERVICES="nginx php${PHP_VER}-fpm"
+if grep -q ^PRESENCE_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES kopano-presence" ; fi
+if grep -q ^WEBMEETINGS_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES kopano-webmeetings" ; fi
+if grep -q ^COTURN_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES coturn" ; fi
 M_SERVICES="postfix"
 if grep -q ^POSTGREY_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVICES postgrey" ; fi
 if grep -q ^CLAMAVD_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVICES clamav-daemon" ; fi
@@ -13,10 +18,6 @@ if grep -q ^AMAVISD_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVIC
 if grep -q ^SPAMD_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVICES kopano-spamd" ; fi
 if grep -q ^FETCHMAIL_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVICES fetchmail" ; fi
 if grep -q ^COURIER_IMAP_ENABLED=yes /etc/kopano/default ; then M_SERVICES="$M_SERVICES courier-imap" ; fi
-W_SERVICES="nginx php7.0-fpm"
-if grep -q ^PRESENCE_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES kopano-presence" ; fi
-if grep -q ^WEBMEETINGS_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES kopano-webmeetings" ; fi
-if grep -q ^COTURN_ENABLED=yes /etc/kopano/default ; then W_SERVICES="$W_SERVICES coturn" ; fi
 # run as user-id, group-id to access cfg and log files from synology: default=100=users changed at build time
 if [ -e /etc/kopano/kuid ]
 then
@@ -43,7 +44,7 @@ CLAMPID="/var/run/clamav/clamav.pid"
 PFIXPID="/var/spool/postfix/pid/master.pid"
 PGRYPID="/var/run/postgrey.pid"
 FEMLPID="/var/run/fetchmail/fetchmail.pid"
-PHPFPMPID="/var/run/php/php7.0-fpm.pid"
+PHPFPMPID="/var/run/php/php${PHP_VER}-fpm.pid"
 SYSLPID="/var/run/rsyslogd.pid"
 NGINXPID="/var/run/nginx.pid"
 IMAPDPID="/var/run/courier/imapd.pid"
@@ -53,17 +54,17 @@ mysql_sock_on()
 	# loop some time waiting fo mysql socket
 	if [ ! -e  /run/mysqld/mysqld10.sock ] 
 	then
-		echo "waiting for mysql socket being available at /run/mysqld/mysqld.sock..." 
+		echo "waiting for mysql socket being available at /run/mysqld/mysqld10.sock..." 
 	fi
 	for i in 0 1 2 3 4 5 6 7 8 9
 	do
-		if [ -e /run/mysqld/mysqld.sock ]
+		if [ -e /run/mysqld/mysqld10.sock ]
 		then
 			return 0
 		fi
 		sleep 10
 	done
-	echo "giving up; restart package or run kopano-init reset to address mount issues"
+	echo "giving up no MySQL found; restart package or run kopano-init reset to address mount issues"
 	touch /etc/kopano/mount.issue
 	return 1
 }
@@ -144,12 +145,12 @@ start_kopano()
 	for S in $K_SERVICES; do
 		service $S start
 	done
-	echo "Starting Kopano mail ..."
-	for S in $M_SERVICES; do
-		service $S start
-	done
 	echo "Starting Kopano web ..."
 	for S in $W_SERVICES; do
+		service $S start
+	done
+	echo "Starting Kopano mail ..."
+	for S in $M_SERVICES; do
 		service $S start
 	done
 	# remove flag for special case restart
@@ -168,16 +169,16 @@ stop_kopano()
 			service $S stop >/dev/null
 		fi
 	done
-	echo "Stopping Kopano mail..."
-	for S in $M_SERVICES; do
+	echo "Stopping Kopano web..."
+	for S in $W_SERVICES; do
 		if service $S status | grep -q "is running"
 		then
 			echo "stopping $S.."
 			service $S stop >/dev/null
 		fi
 	done
-	echo "Stopping Kopano web..."
-	for S in $W_SERVICES; do
+	echo "Stopping Kopano mail..."
+	for S in $M_SERVICES; do
 		if service $S status | grep -q "is running"
 		then
 			echo "stopping $S.."
@@ -190,10 +191,10 @@ kill_kopano()
 	for S in $K_SERVICES; do
 		killall -q -9 $S
 	done
-	for S in $M_SERVICES; do
+	for S in $W_SERVICES; do
 		killall -q -9 $S
 	done
-	for S in $W_SERVICES; do
+	for S in $M_SERVICES; do
 		killall -q -9 $S
 	done
 	# remove stale pids
@@ -293,6 +294,11 @@ set_acl()
 	chmod 751 /etc/kopano/webapp
 	chown root.www-data /etc/kopano/webapp/*
 	chmod 640 /etc/kopano/webapp/*	
+	if [ -e /etc/kopano/webapp/dist ]
+	then
+		chmod 751 /etc/kopano/webapp/dist
+		chmod 640 /etc/kopano/webapp/dist/*	
+	fi
 	# remove recursive softlink in etc-kopano
 	if [ -h /etc/kopano/kopano ] ; then rm /etc/kopano/kopano ; fi
 
@@ -302,6 +308,7 @@ set_acl()
 	chown -R root.www-data /usr/share/z-push
 	chown -R root.kopano /var/log/kopano
 	chown amavis.kopano /var/log/kopano/amavis.log
+	chown www-data.kopano /var/log/kopano/webapp-usr.log
 	chown -R www-data.kopano /var/log/kopano/z-push/
 	find /usr/share/kopano-webapp -type f -exec chmod 640 "{}" ";"
 	find /usr/share/kopano-webapp -type d -exec chmod 750 "{}" ";"
@@ -320,8 +327,13 @@ set_acl()
 	if [ -h /var/log/kopano/log ] ; then rm /var/log/kopano/log ; fi
 	# all var-run, libs: attachments, postfix related
 	if [ -e /var/run/kopano ] ; then chown -R kopano.kopano /var/run/kopano/ ; fi
-	chown -R root.kopano /var/lib/kopano/
+	chown root.kopano /var/lib/kopano/
 	chmod 770 /var/lib/kopano/
+	# attachments need kopano.kopano
+	chown -R kopano.kopano /var/lib/kopano/attachments
+	chmod 770 /var/lib/kopano/attachments
+	chown -R root.kopano /var/lib/kopano/backup
+	chmod 770 /var/lib/kopano/backup
 	# change recursive for attchements, search and other dirs
 	find /var/lib/kopano/ -type f -exec chmod 660 "{}" ";"
 	find /var/lib/kopano/ -type d -exec chmod 770 "{}" ";"
@@ -437,7 +449,8 @@ init_kopano()
 		echo '<html><head><title>Got lost?</title>' > /var/www/html/index.html
 		echo '<meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1">' >> /var/www/html/index.html
 		echo '<style>body{text-align:center;vertical-align:middle;font-family:Verdana;font-size: 110%;}</style></head>' >> /var/www/html/index.html
-		echo '<body><br>Got lost ? Goto <a href="/webapp/index.php">/webapp</a><br><br><img src="robot.png"></body></html>' >> /var/www/html/index.html
+		echo '<body><br>Got lost ? Goto <a href="/webapp/index.php">Webapp</a> <a href="/Microsoft-Server-ActiveSync">Microsoft-Server-ActiveSync</a>' >> /var/www/html/index.html
+		echo '<br><br><img src="robot.png"></body></html>' >> /var/www/html/index.html
 	fi
 	# stopp all services to modify kopano users settings and have congig copied over
 	kill_kopano
@@ -500,6 +513,8 @@ init_kopano()
 		if [ ! -e /var/lib/postgrey/postgrey.db ] && [ -e /var/lib/postgrey2copy/postgrey.db ] ; then cp -R /var/lib/postgrey2copy/* /var/lib/postgrey ; fi
 		rm -R /var/lib/postgrey2copy
 	fi
+	# ensure the right php version for socket in kopanos nginx cfg file 
+	sed -i -e "s~fastcgi_pass.*~fastcgi_pass unix:/var/run/php/php${PHP_VER}-fpm.sock;~g" /etc/kopano/web/kopano-web.conf
 	# tune php-fpm 3x max children knowing the hungry footprint of z-push; create tuning file if non exist
 	if [ ! -e /etc/kopano/web/fpm-pool-target ]
 	then
@@ -509,18 +524,18 @@ init_kopano()
 		echo "max_spare_servers=35" >> /etc/kopano/web/fpm-pool-target
 	fi
 	. /etc/kopano/web/fpm-pool-target
-	local MCH=`grep "pm.max_children =" /etc/php/7.0/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
-	sed -i -e "s~pm.max_children = $MCH~pm.max_children = $max_children~" /etc/php/7.0/fpm/pool.d/www.conf
-	local SSV=`grep "pm.start_servers =" /etc/php/7.0/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
-	sed -i -e "s~pm.start_servers = $SSV~pm.start_servers = $start_servers~" /etc/php/7.0/fpm/pool.d/www.conf
-	local MIS=`grep "pm.min_spare_servers =" /etc/php/7.0/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
-	sed -i -e "s~pm.min_spare_servers = $MIS~pm.min_spare_servers = $min_spare_servers~" /etc/php/7.0/fpm/pool.d/www.conf
-	local MAS=`grep "pm.max_spare_servers =" /etc/php/7.0/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
-	sed -i -e "s~pm.max_spare_servers = $MAS~pm.max_spare_servers = $max_spare_servers~" /etc/php/7.0/fpm/pool.d/www.conf
-	sed -i -e "s~;pm.max_requests = 500~pm.max_requests = 250~" /etc/php/7.0/fpm/pool.d/www.conf
-	sed -i -e "s~;request_terminate_timeout = 0~request_terminate_timeout = 120s~" /etc/php/7.0/fpm/pool.d/www.conf
-	sed -i -e "s~;rlimit_files = 1024~rlimit_files = 131072~" /etc/php/7.0/fpm/pool.d/www.conf
-	sed -i -e "s~;catch_workers_output = yes~catch_workers_output = yes~" /etc/php/7.0/fpm/pool.d/www.conf
+	local MCH=`grep "pm.max_children =" /etc/php/$PHP_VER/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
+	sed -i -e "s~pm.max_children = $MCH~pm.max_children = $max_children~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	local SSV=`grep "pm.start_servers =" /etc/php/$PHP_VER/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
+	sed -i -e "s~pm.start_servers = $SSV~pm.start_servers = $start_servers~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	local MIS=`grep "pm.min_spare_servers =" /etc/php/$PHP_VER/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
+	sed -i -e "s~pm.min_spare_servers = $MIS~pm.min_spare_servers = $min_spare_servers~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	local MAS=`grep "pm.max_spare_servers =" /etc/php/$PHP_VER/fpm/pool.d/www.conf | cut -d'=' -f2- | cut -c 2-`
+	sed -i -e "s~pm.max_spare_servers = $MAS~pm.max_spare_servers = $max_spare_servers~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	sed -i -e "s~;pm.max_requests = 500~pm.max_requests = 250~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	sed -i -e "s~;request_terminate_timeout = 0~request_terminate_timeout = 120s~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	sed -i -e "s~;rlimit_files = 1024~rlimit_files = 131072~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
+	sed -i -e "s~;catch_workers_output = yes~catch_workers_output = yes~" /etc/php/$PHP_VER/fpm/pool.d/www.conf
 	# create logs and give kopano group writes
 	touch /var/log/kopano/dagent.log
 	touch /var/log/kopano/fetchmail.log
@@ -533,6 +548,9 @@ init_kopano()
 	touch /var/log/kopano/server.log
 	touch /var/log/kopano/spooler.log
 	touch /var/log/kopano/webmeetings.log
+	touch /var/log/kopano/webapp-usr.log
+	touch /var/log/kopano/z-push/z-push.log
+	touch /var/log/kopano/z-push/z-push-error.log
 	touch /var/log/kopano/mail.log
 	touch /var/log/kopano/mail.info
 	touch /var/log/kopano/mail.warn
@@ -541,8 +559,11 @@ init_kopano()
 	touch /var/log/kopano/clamav.log
 	touch /var/log/kopano/freshclam.log
 	touch /var/log/kopano/spamassassin.log
-	touch /var/log/kopano/z-push/z-push.log
-	touch /var/log/kopano/z-push/z-push-error.log
+	touch /var/log/kopano/messages
+	touch /var/log/kopano/syslog
+	touch /var/log/kopano/daemon.log
+	touch /var/log/kopano/fail2ban.log
+	touch /var/log/kopano/php${PHP_VER}-fpm.log
 	# postfix expose log files to kopano folder
 	ln -sf /var/log/kopano/mail.log /var/log/mail.log
 	ln -sf /var/log/kopano/mail.info /var/log/mail.info
@@ -551,6 +572,11 @@ init_kopano()
 	if [ -e /var/log/clamav ] ; then rm -R /var/log/clamav ; fi
 	ln -sf /var/log/kopano /var/log/clamav
 	ln -sf /var/log/kopano /var/log/spamassassin
+	ln -sf /var/log/kopano/messages /var/log/messages
+	ln -sf /var/log/kopano/syslog /var/log/syslog
+	ln -sf /var/log/kopano/daemon.log /var/log/daemon.log
+	ln -sf /var/log/kopano/fail2ban.log /var/log/fail2ban.log
+	ln -sf /var/log/kopano/php${PHP_VER}-fpm.log /var/log/php${PHP_VER}-fpm.log
 	# postfix: creating lookup tables: virtual alias and bcc
 	if [ -e /etc/kopano/postfix/valiases ]
 	then
@@ -605,15 +631,24 @@ init_kopano()
 		echo "kopano          soft    nofile          80000" >> /etc/security/limits.conf
 		echo "# End of file" >> /etc/security/limits.conf
 	fi
+	# ensure php-fpms php.ini sits on soft links whci could have been overritten by apt init
+	if [ ! -h /etc/php/$PHP_VER/fpm/php.ini ] ; then ln -sf /etc/kopano/web/php.ini /etc/php/$PHP_VER/fpm ; fi
+	# add kopano settings to php.ini
+	if ! grep -q Kopano /etc/kopano/web/php.ini
+	then
+		# adding kopano setting to php.ini..
+		sed -i -e "s~expose_php.*~expose_php = Off\n; Kopano settings\nphp_flag magic_quotes_gpc = off\nphp_flag register_globals = off~" /etc/kopano/web/php.ini
+		sed -i -e "s~php_flag register_globals.*~php_flag register_globals = off\nphp_flag magic_quotes_runtime = off\nphp_flag short_open_tag = on\n~" /etc/kopano/web/php.ini
+	fi
 	# adjust upload_max_filesize and post_max_size from 2M / 8M to size of mail attachments
 	local MSG_SIZE=`grep message_size_limit /etc/kopano/postfix/main.cf | cut -d "=" -f2- | cut -d " " -f2-`
 	MSG_SIZE=$(expr $MSG_SIZE / 1024 / 1024)
 	if [ $MSG_SIZE -gt 2 ] 
 	then
 		echo "increasing php upload_max_filesize to ${MSG_SIZE}M.."
-		sed -i -e "s~upload_max_filesize = 2M~upload_max_filesize = ${MSG_SIZE}M~" /etc/php/7.0/fpm/php.ini
+		sed -i -e "s~upload_max_filesize = 2M~upload_max_filesize = ${MSG_SIZE}M~" /etc/php/$PHP_VER/fpm/php.ini
 		MSG_SIZE=$(expr $MSG_SIZE + 1)
-		sed -i -e "s~post_max_size = 8M~post_max_size = ${MSG_SIZE}M~" /etc/php/7.0/fpm/php.ini
+		sed -i -e "s~post_max_size = 8M~post_max_size = ${MSG_SIZE}M~" /etc/php/$PHP_VER/fpm/php.ini
 	fi
 	# amavis adjustments to enable spamassasin and clamav (test via amavisd-new debug-sa)
 	sed -i -e "s~\$DO_SYSLOG = 1;~\$logfile = \"/var/log/kopano/amavis.log\";\n\$DO_SYSLOG = 0;~" /etc/kopano/default-amavis
@@ -622,6 +657,9 @@ init_kopano()
 	sed -i -e "s~#   \\\%bypass_virus_checks~   \\\%bypass_virus_checks~" /etc/kopano/content_filter_mode
 	sed -i -e "s~#@bypass_spam_checks_maps~@bypass_spam_checks_maps~" /etc/kopano/content_filter_mode
 	sed -i -e "s~#   \\\%bypass_spam_checks~   \\\%bypass_spam_checks~" /etc/kopano/content_filter_mode
+	# set logging to webapp users for errors
+	sed -i -e "s~define('LOG_USER_LEVEL'.*~define('LOG_USER_LEVEL', LOGLEVEL_ERROR);~" /etc/kopano/webapp/config.php
+	sed -i -e "s~define('LOG_FILE_DIR'.*~define('LOG_FILE_DIR', '/var/log/kopano/webapp-usr.log');~" /etc/kopano/webapp/config.php
 	# change to non-drop spam mode if set in kopano-default
 	if grep -q ^BOUNCE_SPAM_ENABLED=no /etc/kopano/default
 	then
@@ -635,9 +673,20 @@ init_kopano()
 		echo $DOM >/etc/kopano/mailname
 		ln -sf /etc/kopano/mailname /etc/mailname
 	fi
-	if ! grep -q hdrfrom_notify_sender /etc/kopano/user-amavis
+	# add to user-amavis hdrfrom_notify_sender and @local_domains_acl = ( "Domain-1.de", "Domin-2.de" ); 
+	if [ -e /etc/kopano/user-amavis ] && ! grep -q hdrfrom_notify_sender /etc/kopano/user-amavis
 	then
-		sed -i -e "s~use strict;~use strict;\n\$hdrfrom_notify_sender = \"postmaster\\\@${DOM}\";~" /etc/kopano/user-amavis
+		sed -i -e "s~use strict;~use strict;\n\$hdrfrom_notify_sender = 'postmaster\\@${DOM}';~" /etc/kopano/user-amavis
+	else
+		# amavis no longer likes double quotes in $hdrfrom_notify_sender aka replace quotes
+		sed -i -e "s~\"~'~g" /etc/kopano/user-amavis
+	fi
+	if [ -e /etc/kopano/user-amavis ] && ! grep -q local_domains_acl /etc/kopano/user-amavis
+	then
+		# add " before 1st and after last character and replace , with ","
+		#local VDOMS=`cat /etc/kopano/postfix/vdomains | sed -e 's~, ~", "~g' | sed -e 's/^\(.\{0\}\)/\1"/' | sed 's/$/"/'`
+		#sed -i -e "s~use strict;~use strict;\n\@local_domains_acl = ( \"${VDOMS}\" );~" /etc/kopano/user-amavis
+		sed -i -e "s~use strict;~use strict;\n\@local_domains_acl = ( '${DOM}' );~" /etc/kopano/user-amavis
 	fi
 	# register and initialize razor and pysor set acl first as amavis uid changed
 	chown -R amavis.kopano /var/lib/amavis/
@@ -664,10 +713,10 @@ init_kopano()
 		if [ ! -e /usr/share/locale/locale.alias ] ; then ln -s /etc/locale.alias /usr/share/locale/locale.alias ; fi
 		dpkg-reconfigure  -f noninteractive locales
 	fi
-	echo "setting acl, ssl, encryption shared secrets"
+	echo "setting acl, ssl, encryption shared secrets, fetchmail and plugins.."
 	# change run group for webmeetings for acls with synology
 	if [ -e /etc/kopano/default-webmeetings ]
-	then 
+	then
 		sed -i -e "s~www-data~kopano~" /etc/kopano/default-webmeetings
 		sed -i -e "s~'/var/run'~'/var/run/kopano'~" /etc/kopano/default-webmeetings
 		sed -i -e "s~kopano-webmeetings.pid~webmeetings.pid~" /etc/kopano/default-webmeetings
@@ -682,6 +731,27 @@ init_kopano()
 		fi
 		/usr/local/bin/kopano-fetchmail.sh init
 	fi
+	# now adjustments for webapp plugins like mdm, passwd, fetchmail 
+	# fetchmail webapp-plugin settings
+	if [ -e /etc/kopano/webapp/config-fetchmail.php ]
+	then
+		# set MariaDB port 3307 and Docker host parent IP, user & pwd
+		local DB_NAME=`grep ^mysql_database /etc/kopano/server.cfg | cut -f2 -d'=' | grep -o '[^\t ].*'`
+		local DB_USER=`grep ^mysql_user /etc/kopano/server.cfg | cut -f2 -d'=' | grep -o '[^\t ].*'`
+		local DB_PASS=`grep ^mysql_password /etc/kopano/server.cfg | cut -f2 -d'=' | grep -o '[^\t ].*'`
+		local SALT="$(openssl rand -hex 8 | sed 's,/,_,g')"
+		sed -i -e "s~3306~3307~g" /etc/kopano/webapp/config-fetchmail.php
+		sed -i -e "s~define('PLUGIN_FETCHMAIL_DATABASE_HOST'.*~define('PLUGIN_FETCHMAIL_DATABASE_HOST', \"${PARENT}\");~" /etc/kopano/webapp/config-fetchmail.php
+		sed -i -e "s~\"kopano\"~\"$DB_NAME\"~" /etc/kopano/webapp/config-fetchmail.php
+		sed -i -e "s~define('PLUGIN_FETCHMAIL_DATABASE_USER'.*~define('PLUGIN_FETCHMAIL_DATABASE_USER', \"${DB_USER}\");~" /etc/kopano/webapp/config-fetchmail.php
+		sed -i -e "s~password~$DB_PASS~" /etc/kopano/webapp/config-fetchmail.php
+		sed -i -e "s~changethis\!~$SALT~" /etc/kopano/webapp/config-fetchmail.php
+	fi
+	if [ -e /etc/kopano/webapp/config-mdm.php ] && ! grep -q 9080 /etc/kopano/webapp/config-mdm.php
+	then
+		sed -i -e "s~localhost~localhost:9080~" /etc/kopano/webapp/config-mdm.php
+	fi
+	
 }
 post_build()
 {
@@ -757,7 +827,7 @@ then
 	# set init.done flag
 	if [ -e /etc/kopano/init.run ] ; then rm /etc/kopano/init.run ; fi
 	echo "$(date "+%Y-%m-%d-%H:%M")" > /etc/kinit.done
-	if [ ! -e /run/mysqld/mysqld.sock ]
+	if [ ! -e /run/mysqld/mysqld10.sock ]
 	then
 		echo "health check error: no msql socket via mount point; mariadb not yet running?"	
 	fi
@@ -770,7 +840,7 @@ case $1 in
 			k_srv_on kopano-monitor && k_srv_on kopano-gateway && k_srv_on kopano-ical && k_srv_on rsyslog &&
 			m_srv_on postfix && m_srv_on postgrey && m_srv_on clamav-daemon && m_srv_on amavis && m_srv_on fetchmail && 
 			m_srv_on courier-imap &&
-			w_srv_on nginx && w_srv_on php7.0-fpm && w_srv_on kopano-presence && w_srv_on kopano-webmeetings && w_srv_on coturn
+			w_srv_on nginx && w_srv_on php${PHP_VER}-fpm && w_srv_on kopano-presence && w_srv_on kopano-webmeetings && w_srv_on coturn
 		then
 			echo "Kopano core and web is already running"
 			exit 0
@@ -787,7 +857,7 @@ case $1 in
 			sleep 1
 			# error vs warning: exit 0 at critical services running (postfix optional)
 			if k_srv_on kopano-server && k_srv_on kopano-spooler && k_srv_on kopano-dagent &&
-			   m_srv_on postfix && w_srv_on nginx && w_srv_on php7.0-fpm
+			   m_srv_on postfix && w_srv_on nginx && w_srv_on php${PHP_VER}-fpm
 			then
 				echo "Kopano core and web services are now running"
 				exit 0
@@ -884,11 +954,11 @@ case $1 in
 			k_srv_on kopano-monitor && k_srv_on kopano-gateway && k_srv_on kopano-ical && k_srv_on rsyslog &&
 			m_srv_on postfix && m_srv_on postgrey && m_srv_on clamav-daemon && m_srv_on amavis && m_srv_on kopano-spamd &&
 			m_srv_on fetchmail && m_srv_on courier-imap &&
-			w_srv_on nginx && w_srv_on php7.0-fpm && w_srv_on kopano-presence && w_srv_on kopano-webmeetings && w_srv_on coturn
+			w_srv_on nginx && w_srv_on php${PHP_VER}-fpm && w_srv_on kopano-presence && w_srv_on kopano-webmeetings && w_srv_on coturn
 		then
 			echo "Running: $K_SERVICES"
-			echo "Running: $M_SERVICES"
 			echo "Running: $W_SERVICES"
+			echo "Running: $M_SERVICES"
 			exit 0
 		else
 			RET="Core:"
@@ -912,7 +982,12 @@ case $1 in
 			fi
 			if k_srv_on kopano-search
 			then
-				RET="$RET, Search Running"
+				if echo $K_SERVICES | grep -q "kopano-search"
+				then
+					RET="$RET, Search Running"
+				else
+					RET="$RET, Search Disabled"
+				fi
 			else
 				RET="$RET, Search Not Running"
 			fi
@@ -954,6 +1029,53 @@ case $1 in
 				RET="$RET, Syslog Running"
 			else
 				RET="$RET, Syslog Not Running"
+			fi			
+			echo $RET
+			RET="Web:"
+			if w_srv_on nginx
+			then
+				RET="$RET NGINX Running"
+			else
+				RET="$RET NGINX Not Running"
+			fi
+			if w_srv_on php${PHP_VER}-fpm
+			then
+				RET="$RET, PHP5-FPM Running"
+			else
+				RET="$RET, PHP5-FPM Not Running"
+			fi
+			if w_srv_on kopano-presence
+			then
+				if echo $W_SERVICES | grep -q "kopano-presence"
+				then
+					RET="$RET, Presence Running"
+				else
+					RET="$RET, Presence Disabled"
+				fi
+			else
+				RET="$RET, Presence Not Running"
+			fi
+			if w_srv_on kopano-webmeetings
+			then
+				if echo $W_SERVICES | grep -q "kopano-webmeetings"
+				then
+					RET="$RET, Webmeetings Running"
+				else
+					RET="$RET, Webmeetings Disabled"
+				fi
+			else
+				RET="$RET, Webmeetings Not Running"
+			fi
+			if w_srv_on coturn
+			then
+				if echo $W_SERVICES | grep -q "coturn"
+				then
+					RET="$RET, CoTurn Running"
+				else
+					RET="$RET, CoTurn Disabled"
+				fi
+			else
+				RET="$RET, CoTurn Not Running"
 			fi
 			echo $RET
 			RET="Mail:"
@@ -1030,56 +1152,9 @@ case $1 in
 				RET="$RET, Courier-Imap Not Running"
 			fi
 			echo $RET
-			RET="Web:"
-			if w_srv_on nginx
-			then
-				RET="$RET NGINX Running"
-			else
-				RET="$RET NGINX Not Running"
-			fi
-			if w_srv_on php7.0-fpm
-			then
-				RET="$RET, PHP5-FPM Running"
-			else
-				RET="$RET, PHP5-FPM Not Running"
-			fi
-			if w_srv_on kopano-presence
-			then
-				if echo $W_SERVICES | grep -q "kopano-presence"
-				then
-					RET="$RET, Presence Running"
-				else
-					RET="$RET, Presence Disabled"
-				fi
-			else
-				RET="$RET, Presence Not Running"
-			fi
-			if w_srv_on kopano-webmeetings
-			then
-				if echo $W_SERVICES | grep -q "kopano-webmeetings"
-				then
-					RET="$RET, Webmeetings Running"
-				else
-					RET="$RET, Webmeetings Disabled"
-				fi
-			else
-				RET="$RET, Webmeetings Not Running"
-			fi
-			if w_srv_on coturn
-			then
-				if echo $W_SERVICES | grep -q "coturn"
-				then
-					RET="$RET, CoTurn Running"
-				else
-					RET="$RET, CoTurn Disabled"
-				fi
-			else
-				RET="$RET, CoTurn Not Running"
-			fi
-			echo $RET
 			# error vs warning: exit 0 at critical services running
 			if k_srv_on kopano-server && k_srv_on kopano-spooler && k_srv_on kopano-dagent &&
-			   m_srv_on postfix && w_srv_on nginx && w_srv_on php7.0-fpm
+			   m_srv_on postfix && w_srv_on nginx && w_srv_on php${PHP_VER}-fpm
 			then
 				exit 0
 			else
@@ -1106,6 +1181,8 @@ case $1 in
 		# clean up old pid.files
 		if [ -e /var/run/kopano/*.pid ] ; then rm /var/run/kopano/*.pid ; fi
 		mysql_sock_on && start_kopano
+		if grep -q ^CLAMAVD_ENABLED=yes /etc/kopano/default ; then freshclam > /dev/null 2>&1; fi
+		if ! w_srv_on nginx ; then service nginx start ; fi
 		echo "staying alive while kopano service is running.."
 		HEALTH_C_TIMER=0
 		while k_srv_on kopano-server
@@ -1119,10 +1196,11 @@ case $1 in
 				if ! k_srv_on rsyslog ; then service rsyslog start ; fi
 				if ! k_srv_on kopano-spooler ; then service kopano-spooler start ; fi
 				if ! k_srv_on kopano-dagent ; then srvice kopano-dagent start ; fi
+				if ! k_srv_on kopano-search ; then srvice kopano-search start ; fi
 				if ! m_srv_on postfix ; then service postfix start ; fi
 				if ! w_srv_on nginx && grep -q ssl /var/log/nginx/error.log ; then default_ssl ; fi
 				if ! w_srv_on nginx ; then service nginx start ; fi
-				if ! w_srv_on php7.0-fpm ; then service php7.0-fpm start ; fi
+				if ! w_srv_on php${PHP_VER}-fpm ; then service php${PHP_VER}-fpm start ; fi
 				if ! m_srv_on clamav-daemon ; then service clamav-daemon start ; fi
 				if ! m_srv_on amavis
 				then

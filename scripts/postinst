@@ -23,7 +23,7 @@ then
 	SET_SQL_CONF
 	GET_VER_TAG
 	# we do not fint the latest or predefined tag so we have to build
-	if ! CHECK_DOCKER_TAG "https://$K_DHUB" $VER_TAG
+	if ! CHECK_DOCKER_TAG tosoboso/kopano4s $VER_TAG
 	then
 		IMAGE_BUILD="ON"
 	fi
@@ -45,7 +45,7 @@ else
 	INIT_UPDATE
 	OLD_VER_TAG=$VER_TAG
 	GET_VER_TAG
-	if [ "$OLD_VER_TAG" != "$OLD_VER_TAG" ]
+	if [ "$OLD_VER_TAG" != "$VER_TAG" ]
 	then
 		DROP_OLD_DOCKER
 	fi

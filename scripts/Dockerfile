@@ -3,20 +3,25 @@
 FROM debian:stretch as k4s-intermediate
 ENV TERM=ansi \
 	DEBIAN_FRONTEND=noninteractive \
+	PHP_VER="7.2" \
 	K_SNR=${FTP_PROXY} \
 	URL_CORE=G_URL_CORE \
+	URL_UBCORE=G_URL_UBCORE \
 	URL_WEBAPP=G_URL_WEBAPP \
 	URL_MDM=G_URL_MDM \
 	URL_SMIME=G_URL_SMIME \
+	URL_UBSMIME=G_URL_UBSMIME \
 	URL_Z_PUSH=G_URL_Z_PUSH \
 	URL_WEBMEET=G_URL_WEBMEET \
 	URL_MATMOST=G_URL_MATMOST \
 	URL_FILES=G_URL_FILES \
-	URL_DOCED=G_URL_DOCED
+	URL_DOCED=G_URL_DOCED \
+	URL_PASSWD=G_URL_PASSWD \
+	URL_PFETCHM=G_URL_PFETCHM
 
 # layer 1 steps 3-18 or 19: create trusted local kopano repository
 RUN echo "** use an interim container to build trusted local repo for kopano for tranfer into main container.."
-RUN apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends wget apt-utils locales
+RUN apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends wget apt-utils locales unzip
 # stretch-security: prepare repo standad structure with main for creating hashed packages and release files
 RUN	chmod 711 /root && mkdir -p /root/repo &&  mkdir -p /root/repo/dists && mkdir -p /root/repo/dists/kopano && \ 
 	mkdir -p /root/repo/dists/kopano/main && mkdir -p /root/repo/dists/kopano/main/binary-amd64 && \
@@ -38,13 +43,21 @@ RUN	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate 
 #COMMUNITY	wget --no-check-certificate --quiet $URL_CORE -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_CORE}/all/ && \
 #SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_CORE}/amd64/ && \
+# for php 7.2 replace debians php mapi.so by Ubuntus
+#COMMUNITY	if [ "$PHP_VER" != "7.0" ] ; then wget --no-check-certificate --quiet $URL_UBCORE -O- | tar xz -C /root/repo/dists --strip-components=1 ; fi && \
+#COMMUNITY	if [ "$PHP_VER" != "7.0" ] ; then rm /root/repo/dists/kopano/main/binary-amd64/php7-mapi* && cp /root/repo/dists/php7-mapi* /root/repo/dists/kopano/main/binary-amd64 && rm /root/repo/dists/*.deb ; fi && \
+#SUPPORTED	if [ "$PHP_VER" != "7.0" ] ; then rm php7-mapi* && wget --quiet -p -r -nc -nd -l 1 -e robots=off -A "php7-mapi*" --no-check-certificate https://serial:${K_SNR}@${URL_UBCORE}/ ; fi && \
 #COMMUNITY	wget --no-check-certificate --quiet $URL_WEBAPP -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #SUPPORTED	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_WEBAPP} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #COMMUNITY	wget --no-check-certificate --quiet $URL_MDM -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_MDM} && \
 #COMMUNITY	wget --no-check-certificate --quiet $URL_SMIME -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #SUPPORTED	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_SMIME} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
-
+# for php 7.2 replace debians php smine.so by Ubuntus
+#COMMUNITY	if [ "$PHP_VER" != "7.0" ] ; then wget --no-check-certificate --quiet $URL_UBSMIME -O- | tar xz -C /root/repo/dists --strip-components=1 ; fi && \
+#COMMUNITY	if [ "$PHP_VER" != "7.0" ] ; then rm /root/repo/dists/kopano/main/binary-amd64/*plugin-smime* && cp /root/repo/dists/*plugin-smime* /root/repo/dists/kopano/main/binary-amd64 && rm /root/repo/dists/*.deb ; fi && \
+#SUPPORTED	if [ "$PHP_VER" != "7.0" ] ; then rm /root/repo/dists/kopano/main/binary-amd64/*plugin-smime* ; fi && \
+#SUPPORTED	if [ "$PHP_VER" != "7.0" ] ; then wget --quiet -p -r -nc -nd -l 1 -e robots=off -A 'kopano-webapp-plugin-smime*' --no-check-certificate https://serial:${K_SNR}@${URL_UBSMIME}/ ; fi && \
 #SUP_FULL	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_WEBMEET} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #COM_FULL	wget --no-check-certificate --quiet $URL_WEBMEET -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
 #SUP_FULL	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_MATMOST} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
@@ -55,7 +68,14 @@ RUN	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate 
 #SUP_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_DOCED}/amd64/ && \
 #COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/all/ && \
 #COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/amd64/ && \
-mv *.deb /root/repo/dists/kopano/main/binary-amd64
+mv -f *.deb /root/repo/dists/kopano/main/binary-amd64 && \
+# now get non core kopano plugins from github: passwd, fetchmail
+mkdir -p /root/repo/plugins && wget --no-check-certificate --quiet $URL_PASSWD -O /root/repo/plugins/passwd.zip && \
+unzip /root/repo/plugins/passwd.zip -d /root/repo/plugins && rm /root/repo/plugins/passwd.zip && \
+wget --no-check-certificate --quiet $URL_PFETCHM -O /root/repo/plugins/fetchmail.zip && \
+unzip /root/repo/plugins/fetchmail.zip -d /root/repo/plugins && rm /root/repo/plugins/fetchmail.zip && \
+mv /root/repo/plugins/fetchmail/example.config.php /root/repo/plugins/fetchmail/config.php && \
+mv /root/repo/plugins/fetchmail/kopano_fetchmail.service.example /root/repo/plugins/fetchmail/kopano_fetchmail.service
 RUN	echo "** create trusted local repository to comply with stretch-security which takes some time.." && \
 	apt-ftparchive generate -c=/root/repo/aptftp.conf /root/repo/aptgenerate.conf && \
 	apt-ftparchive release -c=/root/repo/aptftp.conf /root/repo/dists/kopano/main >/root/repo/dists/kopano/main/Release
@@ -67,18 +87,20 @@ RUN LANGS="de fr es it nl" && for L in $LANGS ; do mkdir -p /root/repo/locale/$L
 WORKDIR /root
 RUN rm /root/repo/dists/kopano/main/Contents-amd64.gz && rm /root/repo/packages-amd64.db
 RUN tar -zcvf kopano-repo.tgz repo/
+
 # now the main container in which we copy the local repo from interim container
 FROM debian:stretch-slim
 MAINTAINER vbettag "tosoboso@web.de"
 # set arg and env variables respectively urls and DEBIAN_FRONTEND to noninteractive
-ENV BUILD="2018-05-10" \
+ENV BUILD="2018-12-26" \
 	EDITION="Kopano-Edition" \
 	TAG="Build-Tag" \
 	PARENT=${NO_PROXY} \
-	TERM=ansi \
 	LANG="en_GB.UTF-8" \
 	LANGUAGE="en_GB.UTF-8" \
 	LC_ALL="en_GB.UTF-8" \
+	PHP_VER="7.2" \
+	TERM=ansi \
 	DEBIAN_FRONTEND=noninteractive
 WORKDIR /root
 COPY /scripts/dpkg-remove /root/dpkg-remove
@@ -88,10 +110,14 @@ COPY /scripts/*.sh /usr/local/bin/
 COPY --from=k4s-intermediate /root/kopano-repo.tgz /root/kopano-repo.tgz
 RUN PASSWD="openssl rand -base64 32"
 # layer 2 step 16 or 17: merging run layers to save space in nested docker file syatem
-RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchmail, amavisd, spamassassin, clamav, postgrey...." && \ 
+RUN echo "** setup debian system basics incl. nginx, php-${PHP_VER} then postfix, fetchmail, amavisd, spamassassin, clamav, postgrey...." && \ 
 	apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends --assume-yes \ 
-	wget locales ssl-cert rsyslog dialog nginx-light php-fpm && \
+	wget locales apt-transport-https ssl-cert ca-certificates rsyslog dialog nginx-light iptables && \
+	# remove nginx files and prepare for php7.x-fpm instead of php-fpm which is 7.0 EOL
 	rm /etc/nginx/sites-enabled/default && rm /var/www/html/index.nginx-debian.html && \
+	wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg && \
+	if [ "$PHP_VER" != "7.0" ] ; then echo "deb https://packages.sury.org/php/ stretch main" > /etc/apt/sources.list.d/php.list ; fi && \
+	apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends php${PHP_VER}-fpm && \
 	# set locales GB/US UTF-8 and DE plus CET timezone plus optional other locale at build time
 	sed -i -e "s~# en_GB.UTF-8~en_GB.UTF-8~" /etc/locale.gen && sed -i -e "s~# en_US.UTF-8~en_US.UTF-8~" /etc/locale.gen && \
 	sed -i -e "s~# de_DE.UTF-8~de_DE.UTF-8~" /etc/locale.gen && \
@@ -100,7 +126,7 @@ RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchma
 	if echo $EDITION | grep -q "Supported" ; then touch /etc/K_SUPPORTED ; else touch /etc/K_COMMUNITY ; fi && \
 	groupmod -g 1023 www-data && usermod -u 1023 -g 1023 www-data && mkdir -p /var/lib/postgrey/ && \ 
 	apt-get install -y --allow-unauthenticated --no-install-recommends --assume-yes \
-	postfix pflogsumm libsasl2-modules fetchmail amavisd-new spamassassin postgrey clamav-daemon clamav-freshclam \ 
+	postfix pflogsumm libsasl2-modules fetchmail amavisd-new spamassassin postgrey clamav-daemon clamav-freshclam \
 	# more perl and zip libraries for scanning
 	libnet-dns-perl libmail-spf-perl pyzor razor arj bzip2 cabextract cpio file gzip nomarch pax unzip zoo zip zoo && rm -rf /var/lib/apt/lists/* && \
 # TB Docker tuning: 2 step approach to shrink the Docker image: 1st run collect kopano-repo.tgz in kopano-etc for outside of container
@@ -136,7 +162,7 @@ RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchma
 #KC-681	if [ -e /etc/kopano/webmeetings.cfg ] ; then rm /etc/kopano/webmeetings.cfg ; fi && \
 	if [ -e /root/repo/locale/de ] ; then cp -R /root/repo/locale/* /usr/share/locale ; fi && \
 	apt-get update -y > /etc/update.list && apt-get install --no-install-recommends --allow-unauthenticated --assume-yes \ 
-	kopano-server-packages kopano-migration-imap kopano-migration-pst kopano-spamd \
+	kopano-server-packages kopano-migration-imap kopano-migration-pst kopano-spamd fail2ban \
 	z-push-kopano z-push-kopano-gabsync z-push-kopano-gab2contacts z-push-autodiscover \
 #FULL	kopano-presence \
 #FULL	kopano-webmeetings \
@@ -162,10 +188,13 @@ RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchma
 	kopano-webapp-plugin-spell-nl \
 	kopano-webapp-plugin-titlecounter \
 	kopano-webapp-plugin-webappmanual && \
+# copy over non core kopano plugins
+	if [ -e /root/repo/plugins ] ; then cp -R /root/repo/plugins /usr/share/kopano-webapp ; fi && \
 	apt-get upgrade --no-install-recommends --allow-unauthenticated --assume-yes && \
 #FULL	if [ ! -e /etc/init.d/kopano-presence ] ; then cp /root/repo/kinit.d/kopano-presence /etc/init.d/kopano-presence ; fi && \
 	rm -rf /var/lib/apt/lists/* /root/repo && \
 # layer 3 cleanup: remove obsolete packages and config, autoremove, move and softlink stuff
+	#if [ "$PHP_VER" != "7.0" ] ; then dpkg-query -Wf '${Package}\n' | grep php7.0 >> dpkg-remove ; fi && \
 	apt-get remove -y --assume-yes $(grep -vE "^\s*#" dpkg-remove | tr "\n" " ") && \
 	apt-get autoremove -y  && \
 	dpkg --list | grep "^rc" | cut -d " " -f 3 | xargs --no-run-if-empty dpkg --purge  && \
@@ -219,13 +248,15 @@ RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchma
 	if [ -e /etc/kopano/webapp/config.php ] ; then ln -sf /etc/kopano/webapp/config.php /usr/share/kopano-webapp/config.php ; fi && \
 	PDIR=`find /usr/share/kopano-webapp/plugins/* -maxdepth 0 -type d -exec basename "{}" ";"` && for P in $PDIR ; do if [ -e /usr/share/kopano-webapp/plugins/$P/config.php ] && [ ! -e /etc/kopano/webapp/config-${P}.php ] ; then cp /usr/share/kopano-webapp/plugins/$P/config.php /etc/kopano/webapp/config-${P}.php ; fi ; done && \ 
 	for P in $PDIR ; do if [ -e /etc/kopano/webapp/config-${P}.php ] ; then ln -sf /etc/kopano/webapp/config-${P}.php /usr/share/kopano-webapp/plugins/$P/config.php ; fi ; done && \
-# copy and softlink files for web server
-	cp /etc/php/7.0/mods-available/kopano.ini /etc/kopano/web && \
-	ln -sf /etc/kopano/web/kopano.ini /etc/php/7.0/mods-available && \
-	cp /etc/php/7.0/fpm/php.ini /etc/kopano/web && \
-	ln -sf /etc/kopano/web/php.ini /etc/php/7.0/fpm && \
-	cp /etc/php/7.0/fpm/pool.d/www.conf /etc/kopano/web && \
-	ln -sf /etc/kopano/web/www.conf /etc/php/7.0/fpm/pool.d && \
+# copy and softlink files for web server note php.ini gets overwritten and softlink re-estabilsiched via init
+	cp /etc/php/$PHP_VER/fpm/php.ini /etc/kopano/web && \
+	ln -sf /etc/kopano/web/php.ini /etc/php/$PHP_VER/fpm && \
+	if [ -e /etc/php/$PHP_VER/mods-available/kopano.ini ] ; then cp /etc/php/$PHP_VER/mods-available/kopano.ini /etc/kopano/web ; fi && \
+	ln -sf /etc/kopano/web/kopano.ini /etc/php/$PHP_VER/mods-available && \
+	if [ -e /etc/php/$PHP_VER/mods-available/kopano_smime.ini ] ; then cp /etc/php/$PHP_VER/mods-available/kopano_smime.ini /etc/kopano/web ; fi && \
+	ln -sf /etc/kopano/web/kopano_smime.ini /etc/php/$PHP_VER/mods-available && \
+	cp /etc/php/$PHP_VER/fpm/pool.d/www.conf /etc/kopano/web && \
+	ln -sf /etc/kopano/web/www.conf /etc/php/$PHP_VER/fpm/pool.d && \
 	ln -sf /etc/kopano/web/kopano-web.conf /etc/nginx/conf.d/ && \
 	ln -sf /etc/kopano/web/nginx.conf /etc/nginx && \
 # move files to be exposed and mounted via synology to be copied over by init-script

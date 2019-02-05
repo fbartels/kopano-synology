@@ -17,7 +17,7 @@ else
 fi
 # send enter and skip -t as it messes up when called from perl ui
 if ( (! echo "$@" | grep -q "\-U") || (! echo "$@" | grep -q "\-P") && echo "$@" | grep -q "\-s") ; then echo "when using socket -s provide backup admin user and pwd via -U -P see --help" ; fi
-echo "running backup on kopano in container. For backup from zarafa on same host use -s http://\${PARENT}:236/zarafa or respective host ip-address"
+echo "running backup on kopano in container. For backup from zarafa on same host use -shttp://\${PARENT}:236/zarafa or respective host ip-address"
 echo -e "\n" | $SUDO docker exec -i kopano4s  kopano-backup "$@"
 if (! echo "$@" | grep -q "\-\-restore" && !  echo "$@" | grep -q "\-h" )
 then

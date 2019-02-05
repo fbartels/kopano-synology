@@ -226,7 +226,14 @@ then
 		fi
 		# init phase docker post build
 		INIT_DOCKER
-		echo "waiting for services to restart: 15s.."
-		sleep 15
+		if grep -q ^AMAVISD_ENABLED=yes /etc/kopano/default
+		then 
+			WAIT=70
+		else
+			WAIT=40
+		fi
+		if [ $# -gt 1 ] && [ "$2" == "nowait" ] ; then WAIT=1 ; fi
+		echo "waiting for services to restart: ${WAIT}s.."
+		sleep $WAIT
 		echo -e "\n" | $SUDO docker exec -i kopano4s init.sh status
 fi
