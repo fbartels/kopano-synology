@@ -21,8 +21,13 @@ if [ -e /var/packages/Kopano4s/etc/package.cfg ] && [ "$1" != "legacy" ] && [ "$
 then
 	CFG="/var/packages/Kopano4s/etc/package.cfg"
 else
-	# legacy zarafa package
-	MYSQL="/var/packages/MariaDB/target/usr/bin/mysql"
+	# legacy zarafa package assuming use of MariaDB-5 unless not present adn replica in MariaDB-10
+	if [ -e /var/packages/MariaDB/target/usr/bin/mysql ]
+	then
+		MYSQL="/var/packages/MariaDB/target/usr/bin/mysql"
+	else
+		MYSQL="/var/packages/MariaDB10/target/usr/local/mariadb10/bin/mysql"
+	fi
 	CFG="/etc/zarafa/replication.cfg"
 	if [ -e /etc/zarafa/server.cfg ]
 	then
@@ -52,7 +57,7 @@ else
 	DUMP_PATH="$K_SHARE/backup"
 fi
 
-if [ $# -gt 0 ] && [ $1 == "help" ]
+if [ $# -gt 0 ] && [ "$1" == "help" ]
 then
 	echo "kopano-replication (c) TosoBoso: script for kopano replication via mysql."
 	echo "Usage: kopano-replication [action] with status as default."
@@ -72,7 +77,7 @@ then
 	exit 0
 fi
 
-if [ $# -gt 0 ] && [ $1 == "master" ]
+if [ $# -gt 0 ] && [ "$1" == "master" ]
 then
 	if [ $# -lt 4 ]
 	then
@@ -164,7 +169,7 @@ then
 	echo "replication master set up including slave users to allow connection.."
 	exit 0
 fi
-if [ $# -gt 0 ] && [ $1 == "slave" ]
+if [ $# -gt 0 ] && [ "$1" == "slave" ]
 then
 	if [ $# -lt 4 ]
 	then
@@ -249,9 +254,9 @@ then
 	echo "replication slave set up and connected; run full resync or syncin action to start with master-log-pos from restore.."
 	exit 0
 fi
-if [ $# -gt 0 ] && [ $1 == "slave-add" ]
+if [ $# -gt 0 ] && [ "$1" == "slave-add" ]
 then
-	if [ $K_REPLICATION != "MASTER" ]
+	if [ "$K_REPLICATION" != "MASTER" ]
 	then
 		echo "pleae run this on configured replication master host"
 		exit 1	
@@ -276,9 +281,9 @@ then
 	echo "added slave $SHOST to connect to this master"
 	exit 0
 fi
-if [ $# -gt 0 ] && [ $1 == "syncin" ]
+if [ $# -gt 0 ] && [ "$1" == "syncin" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -311,9 +316,9 @@ then
 		$SUDO /var/packages/MariaDB10/scripts/start-stop-status restart
 	fi
 fi
-if [ $# -gt 0 ] && [ $1 == "resync" ]
+if [ $# -gt 0 ] && [ "$1" == "resync" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -362,9 +367,9 @@ then
 		$SUDO /var/packages/MariaDB10/scripts/start-stop-status restart
 	fi
 fi
-if [ $# -gt 0 ] && [ $1 == "start" ]
+if [ $# -gt 0 ] && [ "$1" == "start" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -384,9 +389,9 @@ then
 		exit 1
 	fi
 fi
-if [ $# -gt 0 ] && [ $1 == "stop" ]
+if [ $# -gt 0 ] && [ "$1" == "stop" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -406,9 +411,9 @@ then
 		exit 1
 	fi
 fi
-if [ $# -gt 0 ] && [ $1 == "skip" ]
+if [ $# -gt 0 ] && [ "$1" == "skip" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -428,9 +433,9 @@ then
 		exit 1
 	fi
 fi
-if [ $# -gt 0 ] && [ $1 == "remove" ]
+if [ $# -gt 0 ] && [ "$1" == "remove" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -463,7 +468,7 @@ then
 fi
 if [ $# -gt 0 ] && [ $1 == "rw" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -473,9 +478,9 @@ then
 	$SUDO /var/packages/MariaDB10/scripts/start-stop-status restart
 	exit 0
 fi
-if [ $# -gt 0 ] && [ $1 == "ro" ]
+if [ $# -gt 0 ] && [ "$1" == "ro" ]
 then
-	if [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication slave host"
 		exit 1	
@@ -485,9 +490,9 @@ then
 	$SUDO /var/packages/MariaDB10/scripts/start-stop-status restart
 	exit 0
 fi
-if [ $# -gt 0 ] && [ $1 == "reset" ]
+if [ $# -gt 0 ] && [ "$1" == "reset" ]
 then
-	if [ $K_REPLICATION != "MASTER" ] && [ $K_REPLICATION != "SLAVE" ]
+	if [ "$K_REPLICATION" != "MASTER" ] && [ $K_REPLICATION != "SLAVE" ]
 	then
 		echo "pleae run this on configured replication master or slave host"
 		exit 1	
@@ -497,7 +502,7 @@ then
 		echo "pleae provide myqsl root pwd for this operation"
 		exit 1
 	fi
-	if [ $K_REPLICATION == "MASTER" ]
+	if [ "$K_REPLICATION" == "MASTER" ]
 	then
 		SQL="RESET MASTER;"
 	else
@@ -520,13 +525,13 @@ then
 	fi
 fi
 # default status mode
-if [ $K_REPLICATION == "OFF" ]
+if [ "$K_REPLICATION" == "OFF" ]
 then
 	echo "kopano mysql replication is disabled; select action 'master' or 'slave'; see help for details"
 	exit 1
 fi
 # default if no parameters or status is given
-if [ $K_REPLICATION == "SLAVE" ]
+if [ "$K_REPLICATION" == "SLAVE" ]
 then
 	SQL="SHOW SLAVE STATUS\G"
 	$SUDO $MYSQL -urslave -p$K_REPLICATION_PWD -e "$SQL" >/tmp/out.sql 2>&1
@@ -538,7 +543,8 @@ then
 		exit 1
 	fi
 	SLIO=`grep Slave_IO_Running /tmp/out.sql | cut -d':' -f2-`
-	SLSQL=`grep Slave_SQL_Running /tmp/out.sql | cut -d':' -f2-`
+	# skip Slave_SQL_Running_State so only 1stl line via head -1
+	SLSQL=`grep Slave_SQL_Running /tmp/out.sql | head -1 | cut -d':' -f2-`
 	SLSEC=`grep Seconds_Behind_Master /tmp/out.sql | cut -d':' -f2- | cut -c 2-`
 	MSVR=`grep Master_Host /tmp/out.sql | cut -d':' -f2-`
 	MUSR=`grep Master_User /tmp/out.sql | cut -d':' -f2-`
@@ -607,7 +613,7 @@ then
 	fi
 	exit 0
 fi
-if [ $K_REPLICATION == "MASTER" ]
+if [ "$K_REPLICATION" == "MASTER" ]
 then
 	SQL="SHOW MASTER STATUS\G; SHOW SLAVE HOSTS\G"
 	$SUDO $MYSQL -urslave -p$K_REPLICATION_PWD -e "$SQL" >/tmp/out.sql 2>&1
@@ -623,7 +629,7 @@ then
 	SSVRS=`grep Host /tmp/out.sql | cut -d':' -f2- | cut -c 2-`
 	MSG=""
 	RERR=0
-	if [ $# -gt 0 ] && [ $1 == "health" ]
+	if [ $# -gt 0 ] && [ "$1" == "health" ]
 	then
 		if [ "$SSVRS" == "" ]
 		then

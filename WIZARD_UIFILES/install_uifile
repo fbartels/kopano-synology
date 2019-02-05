@@ -59,7 +59,7 @@
 			"defaultValue": false
 		 },{
 			"key": "PKGWIZ_BUILD",
-			"desc": "Build Docker locally with pkp-7.2 (beta) instead of loading from Docker repository (php 7.0).",
+			"desc": "Build Docker locally instead of loading compiled container from TosoBoso's Docker repository.",
 			"defaultValue": false
 		 },{
 			"key": "PKGWIZ_DOCKER_NW_HOST",

@@ -1,16 +1,16 @@
 #!/bin/sh
 # ** (c) 2015/16 TosoBoso - common lib for Kopano-4-Synology in Docker container
 # ** set environment
-VER_COMMUNITY_BASE_TAG="Community_base-8.7.80_Web-3.5.1_Push-2.4.5"
-VER_SUPPORTED_BASE_TAG="Supported_base-8.6.9_Web-3.5.0_Push-2.4.5"
-VER_COMMUNITY_FULL_TAG="Community-8.7.80_Web-3.5.1_Push-2.4.5_Meet-0.29.5_Mmost-5.6.1_Files-2.1.5_Docs-5.4"
-VER_SUPPORTED_FULL_TAG="Supported-8.6.9_Web-3.5.0_Push-2.4.5_Meet-0.29.5_Mmost-5.6.1_Files-2.1.4_Docs-5.4"
+VER_COMMUNITY_BASE_TAG="Community_base-8.7.80_Web-3.5.2_Push-2.4.5"
+VER_SUPPORTED_BASE_TAG="Supported_base-8.6.9_Web-3.5.1_Push-2.4.5"
+VER_COMMUNITY_FULL_TAG="Community-8.7.80_Web-3.5.2_Push-2.4.5_Meet-0.29.5_Mmost-5.7.0_Files-2.1.5_Docs-5.4"
+VER_SUPPORTED_FULL_TAG="Supported-8.6.9_Web-3.5.1_Push-2.4.5_Meet-0.29.5_Mmost-5.6.3_Files-2.1.4_Docs-5.4"
 VER_MIGRATION_TAG="Migration-8.4.5.0_Web-3.4.2_Push-2.3.9"
 COMMUNITY_BASE_SIZE=155
 SUPPORTED_BASE_SIZE=151
 MIGRATION_SIZE=150
 COMMUNITY_FULL_SIZE=174
-SUPPORTED_FULL_SIZE=169
+SUPPORTED_FULL_SIZE=168
 PKG_NAME=Kopano4s
 ETC_PATH="/usr/syno/etc/packages/$PKG_NAME"
 TARGET_PATH="/var/packages/$PKG_NAME/target"
@@ -1339,6 +1339,7 @@ SET_DOCKERFILE()
 	local URL_PASSWD="https://github.com/apio-sys/kopano-webapp-passwd/raw/master/builds/passwd-1.4.zip"
 	# from fork "https://github.com/dducret/kopano-webapp-passwd/raw/master/builds/passwd-1.3.zip"
 	# newer but with issues "https://github.com/apio-sys/kopano-webapp-passwd/raw/master/builds/passwd-1.4.zip"
+	local URL_G2FA="https://www.familiethimm.de/download/2525/"
 	local URL_PFETCHM="https://github.com/olia-dev/kopano-webapp-fetchmail/raw/master/builds/fetchmail-1.0.2.zip"
 	if [ "$K_EDITION" == "Supported" ]
 	then
@@ -1498,6 +1499,7 @@ SET_DOCKERFILE()
 	sed -i -e "s~G_URL_FILES~$URL_FILES~" /var/packages/Kopano4s/scripts/Dockerfile
 	sed -i -e "s~G_URL_DOCED~$URL_DOCED~" /var/packages/Kopano4s/scripts/Dockerfile
 	sed -i -e "s~G_URL_PASSWD~$URL_PASSWD~" /var/packages/Kopano4s/scripts/Dockerfile
+	sed -i -e "s~G_URL_G2FA~$URL_G2FA~" /var/packages/Kopano4s/scripts/Dockerfile
 	sed -i -e "s~G_URL_PFETCHM~$URL_PFETCHM~" /var/packages/Kopano4s/scripts/Dockerfile
 	# remove kopano-spamd as it did not exist at the time
 	if [ "$K_EDITION" == "Migration" ]

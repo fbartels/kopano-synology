@@ -9,16 +9,35 @@ then
 	exit 1
 fi
 
-if [ -e /var/packages/Kopano4s/etc/package.cfg ] && [ "$1" != "legacy" ] && [ "$2" != "legacy" ] && [ "$3" != "legacy" ]
+# backup from legacy into dump-zarafa is via 1st argument, restore of legacy dump to legacy db is via 2x legacy aka 4th argument
+if [ -e /var/packages/Kopano4s/etc/package.cfg ] && [ "$1" != "legacy" ] && [ "$4" != "legacy" ]
 then
 	. /var/packages/Kopano4s/etc/package.cfg
 	MYSQL="/var/packages/MariaDB10/target/usr/local/mariadb10/bin/mysql"
 	MYSQLDUMP="/var/packages/MariaDB10/target/usr/local/mariadb10/bin/mysqldump"
+	if [ "$2" == "legacy" ] || [ "$3" == "legacy" ]
+	then
+		# resore of zarafa-dump into kopano-migration edition only
+		if [ "$K_EDITION" != "Migration" ]
+		then
+			echo "restore of legacy Zarafa dump into Kopano is only possible via Migration edition. Exiting.."
+			exit 1
+		fi
+		DPREFIX="dump-zarafa"
+	else
+		DPREFIX="dump-kopano"
+	fi
 	LEGACY=0
 else
-	# legacy zarafa package
-	MYSQL="/var/packages/MariaDB/target/usr/bin/mysql"
-	MYSQLDUMP="/var/packages/MariaDB/target/usr/bin/mysqldump"
+	# legacy zarafa package assuming use of MariaDB-5 unless not present adn replica in MariaDB-10
+	if [ -e /var/packages/MariaDB/target/usr/bin/mysql ]
+	then
+		MYSQL="/var/packages/MariaDB/target/usr/bin/mysql"
+		MYSQLDUMP="/var/packages/MariaDB/target/usr/bin/mysqldump"
+	else
+		MYSQL="/var/packages/MariaDB10/target/usr/local/mariadb10/bin/mysql"
+		MYSQLDUMP="/var/packages/MariaDB10/target/usr/local/mariadb10/bin/mysqldump"
+	fi
 	if [ -e /etc/zarafa4h/server.cfg ] || [ -e /etc/zarafa/server.cfg ]
 	then
 		if [ -e /etc/zarafa4h/server.cfg ]
@@ -27,6 +46,7 @@ else
 		else
 			ETC=/etc/zarafa
 		fi
+		DPREFIX="dump-zarafa"
 		LEGACY=1
 		if [ -e /var/packages/Kopano4s/etc/package.cfg ]
 		then
@@ -79,9 +99,10 @@ fi
 
 if [ "$1" == "restore" ]
 then
-	if [ "$2" == "" ] || !(test -e $DUMP_PATH/dump-kopano-${2}.sql.gz)
+	# DPREFIX=dump-kopano / zarafa dependent on legacy switch"
+	if [ "$2" == "" ] || !(test -e $DUMP_PATH/$DPREFIX-${2}.sql.gz)
 	then
-		TS=`ls -t1 $DUMP_PATH/dump-kopano-*.sql.gz | head -n 1 | grep -o [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]`
+		TS=`ls -t1 $DUMP_PATH/$DPREFIX-*.sql.gz | head -n 1 | grep -o [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]`
 		if [ "$TS" == "" ]
 		then
 			TS="no files exist"
@@ -105,7 +126,7 @@ then
 	# do not restore in active slave mode as it breaks replication and stop if msql read-only
 	if [ "$K_REPLICATION" == "SLAVE" ] && ( (kopano-replication | grep -q "running") || (grep -q "^read-only" /var/packages/MariaDB10/etc/my.cnf))
 	then
-		MSG="refuse restore: replication running or mysql read-only do zarafa-replication reset first"
+		MSG="refuse restore: replication running or mysql read-only do kopano-replication reset first"
 		echo $MSG
 		if [ $NOTIFY -gt 0 ]
 		then
@@ -114,7 +135,7 @@ then
 		exit 1
 	fi
 	TS=$(date "+%Y.%m.%d-%H.%M.%S")
-	MSG="stoping kopano and starting restore of $DB_NAME from dump-kopano-${TSTAMP}.sql.gz..."
+	MSG="stoping kopano and starting restore of $DB_NAME from $DPREFIX-${TSTAMP}.sql.gz..."
 	echo -e "$TS $MSG" >> $DUMP_LOG
 	echo "$MSG"
 	K_START=0
@@ -137,12 +158,12 @@ then
 			K_START=1
 		fi
 	fi
-	gunzip $DUMP_PATH/dump-kopano-${TSTAMP}.sql.gz
+	gunzip $DUMP_PATH/$DPREFIX-${TSTAMP}.sql.gz
 	STARTTIME=$(date +%s)
-	$MYSQL $DB_NAME -u$DB_USER -p$DB_PASS < $DUMP_PATH/dump-kopano-${TSTAMP}.sql >$SQL_ERR 2>&1
+	$MYSQL $DB_NAME -u$DB_USER -p$DB_PASS < $DUMP_PATH/$DPREFIX-${TSTAMP}.sql >$SQL_ERR 2>&1
 	# collect if available master-log-positon in in sql-dump
-	ML=`head $DUMP_PATH/dump-kopano-${TSTAMP}.sql -n50 | grep "MASTER_LOG_POS" | cut -c 4-`
-	gzip -9 $DUMP_PATH/dump-kopano-${TSTAMP}.sql
+	ML=`head $DUMP_PATH/$DPREFIX-${TSTAMP}.sql -n50 | grep "MASTER_LOG_POS" | cut -c 4-`
+	gzip -9 $DUMP_PATH/$DPREFIX-${TSTAMP}.sql
 	ENDTIME=$(date +%s)
 	DIFFTIME=$(( $ENDTIME - $STARTTIME ))
 	TASKTIME="$(($DIFFTIME / 60)) : $(($DIFFTIME % 60)) min:sec."
@@ -230,32 +251,27 @@ echo -e "$MSG"
 # prevent unnoticed backup error when pipe is failing
 set -o pipefail
 # delete old dump files dependent on keep versions / retention
-DBDUMPS=`find $DUMP_PATH -name "dump-kopano-*.sql.gz" | wc -l | sed 's/\ //g'`
+DBDUMPS=`find $DUMP_PATH -name "$DPREFIX-*.sql.gz" | wc -l | sed 's/\ //g'`
 if [ "$DBDUMPS" == "" ]
 then
 	DBDUMPS=0
 fi
 while [ $DBDUMPS -ge $KEEP_BACKUPS ]
 do
-	ls -tr1 $DUMP_PATH/dump-kopano-*.sql.gz | head -n 1 | xargs rm -f 
+	ls -tr1 $DUMP_PATH/$DPREFIX-*.sql.gz | head -n 1 | xargs rm -f 
 	DBDUMPS=`expr $DBDUMPS - 1` 
 done
 
 TSTAMP=`date +%Y%m%d%H%M`
-DUMP_FILE_RUN="$DUMP_PATH/.dump-kopano-${TSTAMP}.sql.gK_RUNNING"
+DUMP_FILE_RUN="$DUMP_PATH/.$DPREFIX-${TSTAMP}.sql.gK_RUNNING"
 
 # check for previous files and remove (2 grep lines) or stop processing (>2 processes)
-if [ -e $DUMP_PATH/.dump-kopano-*.sql.gK_RUNNING ]
+if [ -e $DUMP_PATH/.$DPREFIX-*.sql.gK_RUNNING ]
 then
-	if [ $MAJOR_VERSION -gt 5 ]
-	then
-		RET=`ps -f | grep zarafa-backup.sh | wc -l`
-	else
-		RET=`ps | grep zarafa-backup.sh | wc -l`
-	fi
+	RET=`ps -f | grep kopano-backup.sh | wc -l`
 	if [ $RET -le 2 ]
 	then
-		rm -f $DUMP_PATH/.dump-kopano-*.sql.gK_RUNNING
+		rm -f $DUMP_PATH/.$DPREFIX-*.sql.gK_RUNNING
 	else
 		echo -e "terminating due to already running mysql dump process"
 		echo -e "terminating due to already running mysql dump process"  >> $DUMP_LOG
@@ -277,10 +293,10 @@ then
 	echo -e $RET >> $DUMP_LOG
 	if [ $NOTIFY -gt 0 ]
 	then
-		/usr/syno/bin/synodsmnotify $NOTIFYTARGET Zarafa-Backup-Error "$RET"
+		/usr/syno/bin/synodsmnotify $NOTIFYTARGET Kopano4s-Backup-Error "$RET"
 	fi
 fi
-mv -f $DUMP_FILE_RUN $DUMP_PATH/dump-kopano-${TSTAMP}.sql.gz
+mv -f $DUMP_FILE_RUN $DUMP_PATH/$DPREFIX-${TSTAMP}.sql.gz
 
 TS=$(date "+%Y.%m.%d-%H.%M.%S")
 MSG="dump for $DB_NAME completed in $TASKTIME"
@@ -288,7 +304,7 @@ echo -e "$TS $MSG" >> $DUMP_LOG
 echo "$MSG"
 if [ $NOTIFY -gt 0 ]
 then
-	/usr/syno/bin/synodsmnotify $NOTIFYTARGET Zarafa-Backup "$MSG"
+	/usr/syno/bin/synodsmnotify $NOTIFYTARGET Kopano4s-Backup "$MSG"
 fi
 # backup attachements if they exist
 if [ "$ATTACHMENT_ON_FS" == "ON" ] && [ ! -d "ls -A $ATTM_PATH" ] 

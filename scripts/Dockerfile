@@ -3,7 +3,7 @@
 FROM debian:stretch as k4s-intermediate
 ENV TERM=ansi \
 	DEBIAN_FRONTEND=noninteractive \
-	PHP_VER="7.2" \
+	PHP_VER="7.0" \
 	K_SNR=${FTP_PROXY} \
 	URL_CORE=G_URL_CORE \
 	URL_UBCORE=G_URL_UBCORE \
@@ -17,6 +17,7 @@ ENV TERM=ansi \
 	URL_FILES=G_URL_FILES \
 	URL_DOCED=G_URL_DOCED \
 	URL_PASSWD=G_URL_PASSWD \
+	URL_G2FA=G_URL_G2FA \
 	URL_PFETCHM=G_URL_PFETCHM
 
 # layer 1 steps 3-18 or 19: create trusted local kopano repository
@@ -69,9 +70,14 @@ RUN	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate 
 #COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/all/ && \
 #COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/amd64/ && \
 mv -f *.deb /root/repo/dists/kopano/main/binary-amd64 && \
-# now get non core kopano plugins from github: passwd, fetchmail
+# now get non core kopano plugins from github and familiethimm.de: passwd, fetchmail, google2fa
 mkdir -p /root/repo/plugins && wget --no-check-certificate --quiet $URL_PASSWD -O /root/repo/plugins/passwd.zip && \
 unzip /root/repo/plugins/passwd.zip -d /root/repo/plugins && rm /root/repo/plugins/passwd.zip && \
+wget --no-check-certificate --quiet $URL_G2FA -O /root/repo/plugins/google2fa.zip && \
+unzip /root/repo/plugins/google2fa.zip -d /root/repo/plugins && rm /root/repo/plugins/google2fa.zip && \
+mv /root/repo/plugins/google2fa/config_default.php /root/repo/plugins/google2fa/config.php && \
+#sed -i -e "s~define('PLUGIN_GOOGLE2FA_ENABLE'.*~define('PLUGIN_GOOGLE2FA_ENABLE', false);"~ /root/repo/plugins/google2fa/config.php && \
+sed -i -e "s~define('PLUGIN_GOOGLE2FA_WHITELIST'.*~define('PLUGIN_GOOGLE2FA_WHITELIST', '192.168.0.0/16,127.0.0.1');"~ /root/repo/plugins/google2fa/config.php && \
 wget --no-check-certificate --quiet $URL_PFETCHM -O /root/repo/plugins/fetchmail.zip && \
 unzip /root/repo/plugins/fetchmail.zip -d /root/repo/plugins && rm /root/repo/plugins/fetchmail.zip && \
 mv /root/repo/plugins/fetchmail/example.config.php /root/repo/plugins/fetchmail/config.php && \
@@ -99,7 +105,7 @@ ENV BUILD="2018-12-26" \
 	LANG="en_GB.UTF-8" \
 	LANGUAGE="en_GB.UTF-8" \
 	LC_ALL="en_GB.UTF-8" \
-	PHP_VER="7.2" \
+	PHP_VER="7.0" \
 	TERM=ansi \
 	DEBIAN_FRONTEND=noninteractive
 WORKDIR /root
@@ -217,7 +223,7 @@ RUN echo "** setup debian system basics incl. nginx, php-${PHP_VER} then postfix
 	ln -sf /etc/k-userscripts /etc/kopano/userscripts && \
 # robot for got lost, softlink webapp and z-push fron /usr area into html area so no alias is needed
 	mv /root/robot.png /var/www/html && ln -sf /usr/share/kopano-webapp /var/www/html/webapp && ln -sf /usr/share/z-push /var/www/html/z-push && \
-	ln -sf /etc/kopano/z-push/config.php /usr/share/z-push/config.php && mv /etc/z-push/* /etc/kopano/z-push && rm -R /etc/z-push && \
+	cp /usr/share/z-push/config.php /usr/share/z-push/config.dist && mv /etc/z-push/* /etc/kopano/z-push && ln -sf /etc/kopano/z-push/config.php /usr/share/z-push/config.php && rm -R /etc/z-push && \
 	ln -sf /etc/kopano/z-push /etc/z-push  && ln -sf /etc/kopano/z-push/policies.ini /usr/share/z-push/policies.ini && \
 # more softlink stuff copying over etc and etc-default files
 	if [ ! -e /etc/kopano/default ] && [ -e /etc/default/kopano ] ; then cp /etc/default/kopano /etc/kopano/default ; fi && \
@@ -243,6 +249,10 @@ RUN echo "** setup debian system basics incl. nginx, php-${PHP_VER} then postfix
 	ln -sf /etc/kopano/fetchmailrc /etc/fetchmailrc && \
 	ln -sf /etc/kopano/postfix/main.cf /etc/postfix/main.cf && \
 	ln -sf /etc/kopano/postfix/master.cf /etc/postfix/master.cf && \
+# create ans softlink kopanos cron.daily and weekly 
+	mkdir -p /etc/kopano/custom && echo '#!/bin/sh' > /etc/kopano/custom/cron.hourly && echo "# put your kopnao cron jobs here" >> /etc/kopano/custom/cron.hourly && \	
+	cp /etc/kopano/custom/cron.hourly /etc/kopano/custom/cron.daily && cp /etc/kopano/custom/cron.daily /etc/kopano/custom/cron.weekly && chmod 750 /etc/kopano/custom/cron.* && chown root.kopano /etc/kopano/custom/cron.* && \
+	ln -sf /etc/kopano/custom/cron.hourly /etc/cron.hourly/kopano && ln -sf /etc/kopano/custom/cron.daily /etc/cron.daily/kopano && ln -sf /etc/kopano/custom/cron.weekly /etc/cron.weekly/kopano && \
 # copy and softlink for webapp and all plugins by plugin-dir/config.php to /etc/kopano/webapp/config-pluginname.php
 	if [ -e /usr/share/kopano-webapp/config.php ] && [ ! -e /etc/kopano/webapp/config.php ] ; then cp /usr/share/kopano-webapp/config.php /etc/kopano/webapp/config.php ; fi && \
 	if [ -e /etc/kopano/webapp/config.php ] ; then ln -sf /etc/kopano/webapp/config.php /usr/share/kopano-webapp/config.php ; fi && \

@@ -26,8 +26,8 @@ for USR in $USRLST; do
 	ACTIVE=`grep Active /tmp/kusr | cut -d ":" -f2- | sed "s~^[\t]*~~"`
 	ADMIN=`grep Administrator /tmp/kusr | cut -d ":" -f2- | sed "s~^[\t]*~~"`
 	SIZE=`grep size /tmp/kusr | cut -d ":" -f2- | sed "s~^[\t]*~~"`
-	FON=`grep ENABLED_FEATURES /tmp/kusr | sed "s~^[\t]*~~" | sed "s~[\t]~:~" | sed "s~[\t]~~g" | sed "s~ ~~g" | cut -d ":" -f2-`
-	FOFF=`grep DISABLED_FEATURES /tmp/kusr | sed "s~^[\t]*~~" | sed "s~[\t]~:~" | sed "s~[\t]~~g" | sed "s~ ~~g" | cut -d ":" -f2-`
+	FON=`grep ENABLED_FEATURES /tmp/kusr | sed "s~^[\t]*~~" | sed "s~[\t]~:~" | sed "s~[\t]~~g" | sed "s~ ~~g" | cut -d ":" -f2- | sed "s~;~; ~g"`
+	FOFF=`grep DISABLED_FEATURES /tmp/kusr | sed "s~^[\t]*~~" | sed "s~[\t]~:~" | sed "s~[\t]~~g" | sed "s~ ~~g" | cut -d ":" -f2- | sed "s~;~; ~g"`
 	GLINES=`grep Groups /tmp/kusr | grep -o '(.*)' | sed 's/[()]//g'`
 	GROUPS=""
 	SENDAS=""
@@ -44,6 +44,6 @@ for USR in $USRLST; do
 		SENDAS=`grep Send-as -A $LINES /tmp/kusr | grep -v Send-as | grep -v Username | grep -v "\-\-\-" | sed "s~^[\t]*~~g" | cut -d "	" -f1 | tr '\n' ';'`
 		SENDAS=${SENDAS%?}
 	fi
-	echo "$USR,$NAME,$MAIL,$ACTIVE,$ADMIN,on:$FON;off:$FOFF,$SIZE,${GROUPS%?},$SENDAS"
+	echo "$USR,$NAME,$MAIL,$ACTIVE,$ADMIN,on:$FON; off:$FOFF,$SIZE,${GROUPS%?},$SENDAS"
 done
 if [ -e /tmp/kusr ] ; then rm /tmp/kusr ; fi

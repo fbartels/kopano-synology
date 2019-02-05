@@ -2,7 +2,7 @@
 # (c) 2018 vbettag initialisation for Kopano4Syno in Docker container
 # kopano-monitor, gateway, ical disabled by default and added if found in etc-default
 if [ ! -e /etc/kopano/default ] && [ -e /etc/kopano/default.init ] ; then cp /etc/kopano/default.init /etc/kopano/default ; fi
-K_SERVICES="kopano-server kopano-spooler kopano-dagent rsyslog"
+K_SERVICES="kopano-server kopano-spooler kopano-dagent rsyslog cron"
 if grep -q ^SEARCH_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-search" ; fi
 if grep -q ^MONITOR_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-monitor" ; fi
 if grep -q ^GATEWAY_ENABLED=yes /etc/kopano/default ; then K_SERVICES="$K_SERVICES kopano-gateway" ; fi
@@ -470,11 +470,19 @@ init_kopano()
 				sed -i -e "s~#pid_file~pid_file"~ /etc/kopano/$C
 				sed -i -e "s~#log_file~log_file"~ /etc/kopano/$C
 			done
+			cp -f /etc/kopano/server.cfg /etc/kopano/server.dist
+			cp -f /etc/kopano2copy/z-push/config.php /etc/kopano/z-push/config.dist
 			cp -f /etc/kopano/server.cfg.init /etc/kopano/server.cfg
 			cp -f /etc/kopano/spooler.cfg.init /etc/kopano/spooler.cfg
 			cp -f /etc/kopano/dagent.cfg.init /etc/kopano/dagent.cfg
 			cp -f /etc/kopano/default.init /etc/kopano/default
 			if [ -e /etc/kopano/spamd.cfg.init ] ; then cp -f /etc/kopano/spamd.cfg.init /etc/kopano/spamd.cfg ; fi
+		fi
+		if [ ! -e /etc/kopano/custom/cron.hourly ]
+		then
+			cp /etc/kopano2copy/custom/cron.* /etc/kopano/custom
+			chown root.kopano /etc/kopano/custom/cron.*
+			chmod 750 /etc/kopano/custom/cron.*
 		fi
 		# make a webapp-plugins dist directory then copy over cfgs that do not exist
 		if [ -e /etc/kopano/webapp/dist ] ; then rm -R /etc/kopano/webapp/dist ; fi

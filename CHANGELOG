@@ -1,3 +1,4 @@
+[2019-01-27 v.0.9.7  [Added Cron and jobs in /ect/kopano/custom, google2fa plugin, started Report-GUI]
 [2019-01-05 v.0.9.6  [Beta PHP 7.2 support for local build only by using mapi.debs from Ubuntu 18]
 [2019-01-02 v.0.9.4  [Fix in image tag autodetect to avoind local build, fix setting attachments on fs]
 [2018-12-30 v.0.9.3  [Search as optional serice via install menu and admin-gui, removed MariaDB5 dependency]
