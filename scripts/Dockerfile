@@ -1,0 +1,249 @@
+# start with itermediate container to build the kopano local repo so we do not expose SNR and URL adn keep the target slim
+# this interim is no slim container as we need to collect locale kopano.mo LC_MESSAGES in /usr/share/locale/lang to copy over
+FROM debian:stretch as k4s-intermediate
+ENV TERM=ansi \
+	DEBIAN_FRONTEND=noninteractive \
+	K_SNR=${FTP_PROXY} \
+	URL_CORE=G_URL_CORE \
+	URL_WEBAPP=G_URL_WEBAPP \
+	URL_MDM=G_URL_MDM \
+	URL_SMIME=G_URL_SMIME \
+	URL_Z_PUSH=G_URL_Z_PUSH \
+	URL_WEBMEET=G_URL_WEBMEET \
+	URL_MATMOST=G_URL_MATMOST \
+	URL_FILES=G_URL_FILES \
+	URL_DOCED=G_URL_DOCED
+
+# layer 1 steps 3-18 or 19: create trusted local kopano repository
+RUN echo "** use an interim container to build trusted local repo for kopano for tranfer into main container.."
+RUN apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends wget apt-utils locales
+# stretch-security: prepare repo standad structure with main for creating hashed packages and release files
+RUN	chmod 711 /root && mkdir -p /root/repo &&  mkdir -p /root/repo/dists && mkdir -p /root/repo/dists/kopano && \ 
+	mkdir -p /root/repo/dists/kopano/main && mkdir -p /root/repo/dists/kopano/main/binary-amd64 && \
+	echo "Dir::ArchiveDir \"/root/repo\"; Dir::CacheDir \"/root/repo\";" >/root/repo/aptgenerate.conf && \
+	echo "Default::Packages::Extensions \".deb\"; Default::Packages::Compress \". gzip\";" >>/root/repo/aptgenerate.conf && \
+	echo "Default::Sources::Compress \"gzip\"; Default::Contents::Compress \"gzip\";" >>/root/repo/aptgenerate.conf && \
+	echo "BinDirectory \"/root/repo/dists/kopano/main/binary-amd64\" { Packages \"/root/repo/dists/kopano/main/binary-amd64/Packages\"; Contents \"/root/repo/dists/kopano/main/Contents-amd64\"; };" >>/root/repo/aptgenerate.conf && \
+	echo "Tree \"/root/repo/dists/kopano\" { Sections \"main\"; Architectures \"amd64\"; };" >>/root/repo/aptgenerate.conf && \
+	echo "APT::FTPArchive::Release {" >/root/repo/aptftp.conf && \
+	echo " Origin \"Kopano\"; Label \"Kopano core\"; Suite \"kopano\"; Components \"main\"; Architectures \"amd64\"; };" >>/root/repo/aptftp.conf
+# copy config and init.d files as on latest versions they are missing (KC-681)
+COPY /scripts/*.tgz /root/repo/
+RUN tar -zxvf /root/repo/kinit.tgz -C /root/repo && tar -zxvf /root/repo/kopano-cfg.tgz -C /root/repo && rm /root/repo/*.tgz
+WORKDIR /root/repo
+RUN if [ ! -e /usr/share/locale/locale.alias ] ; then ln -s /etc/locale.alias /usr/share/locale/locale.alias ; fi
+RUN sed -i -e "s~# en_US.UTF-8~en_US.UTF-8~" /etc/locale.gen && dpkg-reconfigure locales 
+# downloading packages (community in tar, supported plain) and packing everything into a local apt repository incl. deb [trusted=yes]
+RUN	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_Z_PUSH && \
+#COMMUNITY	wget --no-check-certificate --quiet $URL_CORE -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_CORE}/all/ && \
+#SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_CORE}/amd64/ && \
+#COMMUNITY	wget --no-check-certificate --quiet $URL_WEBAPP -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUPPORTED	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_WEBAPP} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#COMMUNITY	wget --no-check-certificate --quiet $URL_MDM -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUPPORTED	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_MDM} && \
+#COMMUNITY	wget --no-check-certificate --quiet $URL_SMIME -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUPPORTED	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_SMIME} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+
+#SUP_FULL	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_WEBMEET} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#COM_FULL	wget --no-check-certificate --quiet $URL_WEBMEET -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUP_FULL	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_MATMOST} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#COM_FULL	wget --no-check-certificate --quiet $URL_MATMOST -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUP_FULL	wget --no-check-certificate --quiet https://serial:${K_SNR}@${URL_FILES} -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#COM_FULL	wget --no-check-certificate --quiet $URL_FILES -O- | tar xz -C /root/repo/dists/kopano/main/binary-amd64 --strip-components=1 && \
+#SUP_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_DOCED}/all/ && \
+#SUP_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate https://serial:${K_SNR}@${URL_DOCED}/amd64/ && \
+#COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/all/ && \
+#COM_FULL	wget --quiet -p -r -nc -nd -l 1 -e robots=off -A deb --no-check-certificate $URL_DOCED/amd64/ && \
+mv *.deb /root/repo/dists/kopano/main/binary-amd64
+RUN	echo "** create trusted local repository to comply with stretch-security which takes some time.." && \
+	apt-ftparchive generate -c=/root/repo/aptftp.conf /root/repo/aptgenerate.conf && \
+	apt-ftparchive release -c=/root/repo/aptftp.conf /root/repo/dists/kopano/main >/root/repo/dists/kopano/main/Release
+RUN echo "now do minimal build to collect kopano.mo in LC_MESSAGES of /usr/share/locale/lang used in target slim container.."
+RUN chmod 711 /root && echo "deb [trusted=yes] file:/root/repo kopano main" > /etc/apt/sources.list.d/kopano.list
+RUN apt-get update -y > /etc/update.list && apt-get install --allow-unauthenticated --assume-yes kopano-lang
+RUN LANGS="de fr es it nl" && for L in $LANGS ; do mkdir -p /root/repo/locale/$L/LC_MESSAGES && \
+	cp /usr/share/locale/$L/LC_MESSAGES/kopano.mo /root/repo/locale/$L/LC_MESSAGES; done
+WORKDIR /root
+RUN rm /root/repo/dists/kopano/main/Contents-amd64.gz && rm /root/repo/packages-amd64.db
+RUN tar -zcvf kopano-repo.tgz repo/
+# now the main container in which we copy the local repo from interim container
+FROM debian:stretch-slim
+MAINTAINER vbettag "tosoboso@web.de"
+# set arg and env variables respectively urls and DEBIAN_FRONTEND to noninteractive
+ENV BUILD="2018-05-10" \
+	EDITION="Kopano-Edition" \
+	TAG="Build-Tag" \
+	PARENT=${NO_PROXY} \
+	TERM=ansi \
+	LANG="en_GB.UTF-8" \
+	LANGUAGE="en_GB.UTF-8" \
+	LC_ALL="en_GB.UTF-8" \
+	DEBIAN_FRONTEND=noninteractive
+WORKDIR /root
+COPY /scripts/dpkg-remove /root/dpkg-remove
+COPY /scripts/*.png /root/
+COPY /scripts/*.sh /usr/local/bin/
+# TB Docker tuning: will be disabled in 2nd as 2 step build pproach to save ~50MB space in container
+COPY --from=k4s-intermediate /root/kopano-repo.tgz /root/kopano-repo.tgz
+RUN PASSWD="openssl rand -base64 32"
+# layer 2 step 16 or 17: merging run layers to save space in nested docker file syatem
+RUN echo "** setup debian system basics incl. nginx, php-7 then postfix, fetchmail, amavisd, spamassassin, clamav, postgrey...." && \ 
+	apt-get update -y > /etc/update.list && apt-get install -y --no-install-recommends --assume-yes \ 
+	wget locales ssl-cert rsyslog dialog nginx-light php-fpm && \
+	rm /etc/nginx/sites-enabled/default && rm /var/www/html/index.nginx-debian.html && \
+	# set locales GB/US UTF-8 and DE plus CET timezone plus optional other locale at build time
+	sed -i -e "s~# en_GB.UTF-8~en_GB.UTF-8~" /etc/locale.gen && sed -i -e "s~# en_US.UTF-8~en_US.UTF-8~" /etc/locale.gen && \
+	sed -i -e "s~# de_DE.UTF-8~de_DE.UTF-8~" /etc/locale.gen && \
+	if [ ! -e /usr/share/locale/locale.alias ] ; then ln -s /etc/locale.alias /usr/share/locale/locale.alias ; fi && \
+	ln -sf /usr/share/zoneinfo/CET /etc/localtime && dpkg-reconfigure locales && dpkg-reconfigure tzdata && \
+	if echo $EDITION | grep -q "Supported" ; then touch /etc/K_SUPPORTED ; else touch /etc/K_COMMUNITY ; fi && \
+	groupmod -g 1023 www-data && usermod -u 1023 -g 1023 www-data && mkdir -p /var/lib/postgrey/ && \ 
+	apt-get install -y --allow-unauthenticated --no-install-recommends --assume-yes \
+	postfix pflogsumm libsasl2-modules fetchmail amavisd-new spamassassin postgrey clamav-daemon clamav-freshclam \ 
+	# more perl and zip libraries for scanning
+	libnet-dns-perl libmail-spf-perl pyzor razor arj bzip2 cabextract cpio file gzip nomarch pax unzip zoo zip zoo && rm -rf /var/lib/apt/lists/* && \
+# TB Docker tuning: 2 step approach to shrink the Docker image: 1st run collect kopano-repo.tgz in kopano-etc for outside of container
+#	mkdir /etc/kopano && cp /root/kopano-repo.tgz /etc/kopano && \ 
+# TB Docker tuning: 2nd step provide kopano-repo.tgz via internal webserver in protected tools url and disable COPY --from=k4s-intermediate
+#	wget $PARENT/tools/kopano-repo.tgz && \ 
+# layer 2 step 8 or 9 prepare, download and install kopano
+	echo "** setup kopano: user, downoad, install core, licensed, webmeetings incl. add-ons, z-push incl. autodiscover...." && \
+	groupadd -g 65540 kopano && useradd -u 1030 -g 65540 -p$PASSWD -M kopano && \
+	usermod -d/usr/share/kopano kopano -s/bin/false -c'kopano demon with Synology UID' && usermod -Gkopano -a root && \
+	# change usr-grp-ids and add scanner users to respective groups to allow file handling for amavis under kopano
+	groupmod -g 130 amavis && usermod -u 130 -g 130 amavis && groupmod -g 129 clamav && usermod -u 129 -g 129 clamav && \
+	groupmod -g 128 debian-spamd && usermod -u 128 -g 128 debian-spamd && groupmod -g 127 postgrey && usermod -u 127 -g 127 postgrey && \
+	usermod -u 126 fetchmail && groupmod -g 125 postfix && usermod -u 125 -g 125 postfix && \
+	adduser clamav amavis && adduser amavis clamav && adduser amavis debian-spamd && adduser debian-spamd amavis && \
+	adduser clamav kopano && adduser amavis kopano && adduser debian-spamd kopano && \ 
+# set z-push log ownership and tweek away by ln warning for default log / state directory
+	mkdir -p /var/log/kopano && mkdir -p /var/log/kopano/z-push && \
+	ln -sf /var/log/kopano/z-push /var/log/z-push   && \
+	chown -R www-data.kopano /var/log/kopano/z-push/   && \
+	mkdir -p /etc/kopano && mkdir -p /etc/kopano/web && mkdir -p /etc/kopano/z-push  && mkdir -p /etc/kopano/z-push/state && \
+	chown -R www-data.kopano /etc/kopano/z-push && \
+	ln -sf /etc/kopano/z-push /var/lib/z-push  && \
+# install kopano, z-push, webapp and plugins using pepo from interim build incl. kopano.mo locales for localized mail-folders
+	chmod 711 /root && echo "deb [trusted=yes] file:/root/repo kopano main" > /etc/apt/sources.list.d/kopano.list && \
+	tar -zxvf /root/kopano-repo.tgz -C /root && rm /root/kopano-repo.tgz && \
+# copy config and init.d files as on latest versions they are missing (KC-681); duak-cfg triggers error so only for supported
+#KC-681	cp /root/repo/kinit.d/* /etc/init.d/ && mkdir -p /etc/kopano && cp /root/repo/kopano.cfg/* /etc/kopano && \
+# presence and webmeetings still have cfg and init shiped so delete them
+#KC-681	if [ -e /etc/init.d/kopano-presence ] ; then rm /etc/init.d/kopano-presence ; fi && \
+#KC-681	if [ -e /etc/kopano/presence.cfg ] ; then rm /etc/kopano/presence.cfg ; fi && \
+#KC-681	if [ -e /etc/init.d/kopano-webmeetings ] ; then rm /etc/init.d/kopano-webmeetings ; fi && \
+#KC-681	if [ -e /etc/kopano/webmeetings.cfg ] ; then rm /etc/kopano/webmeetings.cfg ; fi && \
+	if [ -e /root/repo/locale/de ] ; then cp -R /root/repo/locale/* /usr/share/locale ; fi && \
+	apt-get update -y > /etc/update.list && apt-get install --no-install-recommends --allow-unauthenticated --assume-yes \ 
+	kopano-server-packages kopano-migration-imap kopano-migration-pst kopano-spamd \
+	z-push-kopano z-push-kopano-gabsync z-push-kopano-gab2contacts z-push-autodiscover \
+#FULL	kopano-presence \
+#FULL	kopano-webmeetings \
+	kopano-webapp \
+#FULL	kopano-webapp-plugin-meetings \
+	kopano-webapp-plugin-contactfax \
+	kopano-webapp-plugin-desktopnotifications \
+	kopano-webapp-plugin-filepreviewer \
+#FULL	kopano-webapp-plugin-files kopano-webapp-plugin-filesbackend-smb kopano-webapp-plugin-filesbackend-owncloud \
+	kopano-webapp-plugin-folderwidgets \
+	kopano-webapp-plugin-gmaps \
+	kopano-webapp-plugin-intranet \
+#FULL	kopano-webapp-plugin-mattermost \
+	kopano-webapp-plugin-mdm \
+	kopano-webapp-plugin-pimfolder \
+	kopano-webapp-plugin-quickitems \
+	kopano-webapp-plugin-smime \
+	kopano-webapp-plugin-spell-en \
+	kopano-webapp-plugin-spell-de-de \
+	kopano-webapp-plugin-spell-es \
+	kopano-webapp-plugin-spell-fr \
+	kopano-webapp-plugin-spell-it \
+	kopano-webapp-plugin-spell-nl \
+	kopano-webapp-plugin-titlecounter \
+	kopano-webapp-plugin-webappmanual && \
+	apt-get upgrade --no-install-recommends --allow-unauthenticated --assume-yes && \
+#FULL	if [ ! -e /etc/init.d/kopano-presence ] ; then cp /root/repo/kinit.d/kopano-presence /etc/init.d/kopano-presence ; fi && \
+	rm -rf /var/lib/apt/lists/* /root/repo && \
+# layer 3 cleanup: remove obsolete packages and config, autoremove, move and softlink stuff
+	apt-get remove -y --assume-yes $(grep -vE "^\s*#" dpkg-remove | tr "\n" " ") && \
+	apt-get autoremove -y  && \
+	dpkg --list | grep "^rc" | cut -d " " -f 3 | xargs --no-run-if-empty dpkg --purge  && \
+	apt-get clean && \
+	rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /etc/apt/sources.list.d/kopano.list /root/dpkg-remove && chmod 755 /etc/init.d/kopano-* && \
+# add touch, chmod PIDFILE to kopano service init files and change stop on name instead of exec, special case: search, spamd with pyton
+	K_SRVS=`ls /etc/init.d/kopano-*` && for S in $K_SRVS; do sed -i -e "s~start-stop-daemon --start \$QUIETDAEMON~touch \$PIDFILE \&\& chown kopano.kopano \$PIDFILE \n\tstart-stop-daemon --start \$QUIETDAEMON~" $S  && \
+	sed -i -e "s~start-stop-daemon --stop \$QUIETDAEMON.*~start-stop-daemon --stop \$QUIETDAEMON --pidfile \$PIDFILE --name \$NAME --retry TERM/15/KILL >/dev/null~g" $S ; done  && \
+	sed -i -e "s~search.pid~searchm.pid~" /etc/init.d/kopano-search && sed -i -e "s~--name \$NAME ~~g" /etc/init.d/kopano-search && \
+	sed -i -e "s~unset LC_ALL~PID=\`ps -ef | grep /usr/sbin/kopano-search | head -1 | awk '{print \$2}'\` \&\& echo \$PID > \$PIDFILE\n\tunset LC_ALL~" /etc/init.d/kopano-search && \
+	sed -i -e "s~/usr/bin/python ~~" /etc/init.d/kopano-search && \
+#KC-681	sed -i -e "s~spamd.pid~spamdm.pid~" /etc/init.d/kopano-spamd && sed -i -e "s~--name \$NAME ~~g" /etc/init.d/kopano-spamd && \
+#KC-681	sed -i -e "s~unset LC_ALL LANG~PID=\`ps -ef | grep /usr/sbin/kopano-spamd | head -1 | awk '{print \$2}'\` \&\& echo \$PID > \$PIDFILE\n\tunset LC_ALL LANG~" /etc/init.d/kopano-spamd && \
+#KC-681	sed -i -e "s~/usr/bin/python ~~" /etc/init.d/kopano-spamd && \
+#FULL	sed -i -e "s~presence.pid~presencem.pid~" /etc/init.d/kopano-presence && sed -i -e "s~--name \$NAME ~~g" /etc/init.d/kopano-presence && \
+#FULL	sed -i -e "s~unset LC_ALL~PID=\`ps -ef | grep /usr/sbin/kopano-presence | head -1 | awk '{print \$2}'\` \&\& echo \$PID > \$PIDFILE\n\tunset LC_ALL~" /etc/init.d/kopano-presence && \
+# exclude userscripts from exposed mountpoint in synology softlink it instead,
+	mv /etc/kopano/userscripts /etc/kopano/k-userscripts && \
+	cp -R /etc/kopano/k-userscripts /etc && rm -R /etc/kopano/k-userscripts && \
+	ln -sf /etc/k-userscripts /etc/kopano/userscripts && \
+# robot for got lost, softlink webapp and z-push fron /usr area into html area so no alias is needed
+	mv /root/robot.png /var/www/html && ln -sf /usr/share/kopano-webapp /var/www/html/webapp && ln -sf /usr/share/z-push /var/www/html/z-push && \
+	ln -sf /etc/kopano/z-push/config.php /usr/share/z-push/config.php && mv /etc/z-push/* /etc/kopano/z-push && rm -R /etc/z-push && \
+	ln -sf /etc/kopano/z-push /etc/z-push  && ln -sf /etc/kopano/z-push/policies.ini /usr/share/z-push/policies.ini && \
+# more softlink stuff copying over etc and etc-default files
+	if [ ! -e /etc/kopano/default ] && [ -e /etc/default/kopano ] ; then cp /etc/default/kopano /etc/kopano/default ; fi && \
+	ln -sf /etc/kopano/default /etc/default/kopano && \
+	if [ ! -e /etc/kopano/default-webmeetings ] && [ -e /etc/default/kopano-webmeetings ] ; then cp /etc/default/kopano-webmeetings /etc/kopano/default-webmeetings && ln -sf /etc/kopano/default-webmeetings /etc/default/kopano-webmeetings ; fi && \
+	if [ ! -e /etc/kopano/default-postgrey ] && [ -e /etc/default/postgrey ] ; then cp /etc/default/postgrey /etc/kopano/default-postgrey ; fi && \
+	ln -sf /etc/kopano/default-postgrey /etc/default/postgrey && \
+	if [ ! -e /etc/kopano/default-spamassassin ] && [ -e /etc/default/spamassassin ] ; then cp /etc/default/spamassassin /etc/kopano/default-spamassassin ; fi && \
+	ln -sf /etc/kopano/default-spamassassin /etc/default/spamassassin && \
+	if [ ! -e /etc/kopano/default-amavis-mc ] && [ -e /etc/default/amavis-mc ] ; then cp /etc/default/amavis-mc /etc/kopano/default-amavis-mc ; fi && \
+	ln -sf /etc/kopano/default-amavis-mc /etc/default/amavis-mc && \
+	if [ ! -e /etc/kopano/default-amavisd-snmp-subagent ] && [ -e /etc/default/amavisd-snmp-subagent ] ; then cp /etc/default/amavisd-snmp-subagent /etc/kopano/default-amavisd-snmp-subagent ; fi && \
+	ln -sf /etc/kopano/default-amavisd-snmp-subagent /etc/default/amavisd-snmp-subagent && \
+	if [ ! -e /etc/kopano/default-amavis ] && [ -e /etc/amavis/conf.d/20-debian_defaults ] ; then cp /etc/amavis/conf.d/20-debian_defaults /etc/kopano/default-amavis ; fi && \
+	ln -sf /etc/kopano/default-amavis /etc/amavis/conf.d/20-debian_defaults && \
+	if [ ! -e /etc/kopano/user-amavis ] && [ -e /etc/amavis/conf.d/50-user ] ; then cp /etc/amavis/conf.d/50-user /etc/kopano/user-amavis ; fi && \
+	ln -sf /etc/kopano/user-amavis /etc/amavis/conf.d/50-user && \
+	if [ ! -e /etc/kopano/content_filter_mode ] && [ -e /etc/amavis/conf.d/15-content_filter_mode ] ; then cp /etc/amavis/conf.d/15-content_filter_mode /etc/kopano/content_filter_mode ; fi && \
+	ln -sf /etc/kopano/content_filter_mode /etc/amavis/conf.d/15-content_filter_mode && \
+#todo softlinks into etc-kopano for further /etc/postgrey, /etc/spamassassin, /etc/clamav, /etc/amavis adjustment relevant files
+	if [ ! -e /etc/kopano/default-fetchmail ] && [ -e /etc/default/fetchmail ] ; then cp /etc/default/fetchmail /etc/kopano/default-fetchmail ; fi && \
+	ln -sf /etc/kopano/default-fetchmail /etc/default/fetchmail && \
+	ln -sf /etc/kopano/fetchmailrc /etc/fetchmailrc && \
+	ln -sf /etc/kopano/postfix/main.cf /etc/postfix/main.cf && \
+	ln -sf /etc/kopano/postfix/master.cf /etc/postfix/master.cf && \
+# copy and softlink for webapp and all plugins by plugin-dir/config.php to /etc/kopano/webapp/config-pluginname.php
+	if [ -e /usr/share/kopano-webapp/config.php ] && [ ! -e /etc/kopano/webapp/config.php ] ; then cp /usr/share/kopano-webapp/config.php /etc/kopano/webapp/config.php ; fi && \
+	if [ -e /etc/kopano/webapp/config.php ] ; then ln -sf /etc/kopano/webapp/config.php /usr/share/kopano-webapp/config.php ; fi && \
+	PDIR=`find /usr/share/kopano-webapp/plugins/* -maxdepth 0 -type d -exec basename "{}" ";"` && for P in $PDIR ; do if [ -e /usr/share/kopano-webapp/plugins/$P/config.php ] && [ ! -e /etc/kopano/webapp/config-${P}.php ] ; then cp /usr/share/kopano-webapp/plugins/$P/config.php /etc/kopano/webapp/config-${P}.php ; fi ; done && \ 
+	for P in $PDIR ; do if [ -e /etc/kopano/webapp/config-${P}.php ] ; then ln -sf /etc/kopano/webapp/config-${P}.php /usr/share/kopano-webapp/plugins/$P/config.php ; fi ; done && \
+# copy and softlink files for web server
+	cp /etc/php/7.0/mods-available/kopano.ini /etc/kopano/web && \
+	ln -sf /etc/kopano/web/kopano.ini /etc/php/7.0/mods-available && \
+	cp /etc/php/7.0/fpm/php.ini /etc/kopano/web && \
+	ln -sf /etc/kopano/web/php.ini /etc/php/7.0/fpm && \
+	cp /etc/php/7.0/fpm/pool.d/www.conf /etc/kopano/web && \
+	ln -sf /etc/kopano/web/www.conf /etc/php/7.0/fpm/pool.d && \
+	ln -sf /etc/kopano/web/kopano-web.conf /etc/nginx/conf.d/ && \
+	ln -sf /etc/kopano/web/nginx.conf /etc/nginx && \
+# move files to be exposed and mounted via synology to be copied over by init-script
+	mv /etc/kopano /etc/kopano2copy && \
+	mv /var/spool/postfix /var/spool/postfix2copy && \
+	mv /var/lib/amavis /var/lib/amavis2copy && \
+	mv /var/lib/clamav /var/lib/clamav2copy && \
+	mv /var/lib/postgrey /var/lib/postgrey2copy && \
+	mv /var/lib/spamassassin /var/lib/spamassassin2copy && \
+# remove kopano-logs as they will be mounted and initialised later
+	rm -R /var/log/kopano && \
+# entry-script, kopano scripts made executable
+	chmod 700 /usr/local/bin/init.sh && \
+	chmod 700 /usr/local/bin/kopano-postfix.sh && \
+	chmod 700 /usr/local/bin/kopano-fetchmail.sh
+# layer 4 steps 17,18 or 18,19: set workdir for backups later, entrypoint and expose ports
+WORKDIR /var/lib/kopano/backup
+ENTRYPOINT ["/usr/local/bin/init.sh"]
+CMD ["alive"]
+# ports kopano(s): 236/237, dagent-lmtp 2003, postfix 25, imap(s) 143/144/993/994, ical(s) 8080/8443, webmeetings 8090, Spreed 1935, STUN 3478
+EXPOSE 236 237 2003 25 143 144 993 994 8080 8443 9080 9443 8090 1935 3478
